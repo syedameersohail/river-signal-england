@@ -120,7 +120,7 @@ function App() {
           <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-4xl">
               <p className="max-w-4xl text-2xl font-semibold leading-snug text-slate-900 sm:text-3xl">
-                Freshwater river chemistry across England — ranked, compared, and explained in plain English.
+                Explore freshwater river chemistry across England, with unusual sites ranked, compared, and explained in plain English.
               </p>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-slatecopy sm:text-base">
                 Covers 8,857 Environment Agency monitoring sites on rivers and running surface waters,
