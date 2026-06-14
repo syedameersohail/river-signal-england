@@ -640,10 +640,11 @@ function AboutSection() {
           </p>
           <p>
             The Environment Agency monitors thousands of river sites across England, measuring
-            chemicals like ammonia, phosphate, dissolved oxygen, and nitrate. The raw data is
-            openly available. But unless you can write code and know what to look for, you cannot
-            easily answer basic questions: which rivers are in trouble? Where is water quality
-            getting worse? What is causing the problem?
+            chemicals such as ammonia, phosphate, dissolved oxygen, and nitrate. The raw data is
+            openly available, but its public value depends on whether people can interpret it.
+            River Signal turns complex monitoring data into clear rankings, comparisons, and
+            plain English explanations, helping more people see where water quality looks unusual
+            and where further investigation may be needed.
           </p>
           <p>
             River Signal answers those questions. It scores every monitored site by comparing its
@@ -651,11 +652,12 @@ function AboutSection() {
             what is unusual and why it matters, in plain English.
           </p>
           <p>
-            It is designed for four audiences: regulators who need to prioritise investigations,
-            water companies tracking emerging problems in their networks, journalists and MPs who
-            want evidence they can cite, and residents who want to know whether their local river
-            is healthy.
+            It is designed to make river chemistry data useful beyond specialist circles:
+            for regulators prioritising investigations, water companies tracking emerging problems,
+            journalists and MPs looking for evidence they can cite, and residents who want to
+            understand what is happening in their local river.
           </p>
+
         </AboutBlock>
 
         <AboutBlock title="Where does the data come from?">
@@ -674,23 +676,49 @@ function AboutSection() {
         <AboutBlock title="How does the scoring work?">
           <p>
             Each river site in England has a Water Framework Directive (WFD) classification that
-            describes its type: whether it is in a lowland or upland catchment, small or large,
-            flowing over chalk or sandstone. Sites of the same type should have broadly similar
-            chemistry.
+            describes the kind of river it is: whether it is lowland or upland, small or large,
+            and flowing through geology such as chalk or sandstone. Sites of the same type are
+            expected to have broadly similar chemistry.
           </p>
+
           <p>
-            River Signal groups sites by their WFD type and measures how far each site's chemistry
-            deviates from what is normal for its peer group. A site with unusually high ammonia
-            compared to other lowland chalk streams, for example, will score higher than one with
-            typical levels. The deviation is measured across all 12 chemical features
-            simultaneously, so the score captures sites that are unusual in multiple ways, not just
-            on a single measure.
+            The 12 chemical indicators used are: temperature, pH, alkalinity, conductivity,
+            dissolved oxygen (both concentration and saturation), nitrate, nitrite, total
+            oxidised nitrogen, ammoniacal nitrogen, un-ionised ammonia, and orthophosphate.
+            These were selected because they are measured consistently across most monitoring
+            sites and together capture the key dimensions of river water quality.
           </p>
+
           <p>
-            Sites are then ranked nationally by their overall anomaly score. The top-scoring sites,
-            the ones whose chemistry is most different from what you would expect, are flagged and
-            given a plain English explanation of what is driving the anomaly.
+            River Signal compares each site's chemistry with other sites of the same WFD type
+            nationally, measuring differences across all 12 chemical indicators at the same time.
+            A site with unusually high ammonia compared with other lowland chalk streams, for
+            example, will score higher than one with typical levels.
           </p>
+
+          <p>
+            For WFD types with fewer than 30 sites, where group statistics are less reliable,
+            River Signal compares the site with the 20 geographically nearest sites instead.
+          </p>
+
+          <p>
+            As a separate check, River Signal also identifies each site's closest chemical peers,
+            regardless of WFD classification. This uses a hybrid method that combines dimensionality
+            reduction with full 12-indicator distance measurement.
+          </p>
+
+          <p>
+            If a site's nearest chemical peers mostly belong to a different WFD type from its
+            official classification, this suggests the site may be behaving more like a different
+            river type and should be looked at more closely.
+          </p>
+
+          <p>
+            Sites are then ranked nationally by their overall anomaly score. The highest-ranking
+            sites are flagged and given a plain English explanation of which chemical signals are
+            driving the anomaly.
+          </p>
+
           <p>
             The method does not diagnose the cause of a problem. It identifies where something
             unusual is happening and describes the chemical pattern. Determining whether the cause
@@ -763,12 +791,14 @@ function AboutSection() {
           </p>
         </AboutBlock>
 
-        <AboutBlock title="Who built this">
+        <AboutBlock title="Who built this?">
           <p>
             River Signal was built by Sohail Syed, a data scientist working in the UK water
             industry. The analysis was conducted independently, on personal time and equipment,
-            using publicly available data. The code is open source.
+            using publicly available data. The code is open source, and the project is not
+            affiliated with or endorsed by any employer.
           </p>
+
           <a
             className="inline-flex items-center gap-2 rounded-md border border-riverblue bg-riverblue px-4 py-2 text-sm font-semibold text-white hover:bg-riverblue-dark"
             href="https://github.com/syedameersohail/River-Chemical-Fingerprints-England"
