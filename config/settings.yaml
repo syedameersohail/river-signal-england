@@ -1,0 +1,124 @@
+# River Chemistry Anomaly Engine — Configuration
+# All tuneable parameters in one place.
+
+paths:
+  raw_data: data/raw
+  processed_data: data/processed
+  output: data/output
+
+# ── 12-feature common-core chemical panel ──
+# These are the determinands from your paper. Update codes if EA changes them.
+# Format: determinand_code: display_name
+common_core_panel:
+  "76": "Temperature of Water"
+  "61": "pH"
+  "162": "Alkalinity to pH 4.5 as CaCO3"
+  "77": "Conductivity at 25 C"
+  "9924": "Oxygen, Dissolved as O2"
+  "118": "Nitrite as N"
+  "117": "Nitrate as N"
+  "111": "Ammoniacal Nitrogen as N"
+  "180": "Orthophosphate, reactive as P"
+  "116": "Nitrogen, Total Oxidised as N"
+  "119": "Ammonia un-ionised as N"
+  "9901": "Oxygen, Dissolved, % Saturation"
+
+# ── Ingest filters ──
+# Sample materials to keep (river / running surface water)
+keep_materials:
+  - "RIVER / RUNNING SURFACE WATER"
+  - "RIVER/RUNNING SURFACE WATER"
+
+# Determinands to exclude (derived, non-comparable)
+exclude_determinands:
+  - "Ionic Balance"
+
+# Units to exclude (non-quantitative)
+exclude_units:
+  - "CEL"
+  - "Hazen"
+  - "JTU"
+  - "FTU"
+
+# Left-censored handling: values reported as "<X" are replaced with X * this factor
+censored_factor: 0.5
+
+# ── Fingerprint settings ──
+aggregation: median  # how to collapse observations to site-level (median or mean)
+
+umap:
+  n_neighbours: 15
+  min_dist: 0.1
+  n_components: 2
+  metric: euclidean
+  random_state: 42
+
+# ── Scoring settings ──
+anomaly:
+  # Method: how to define "expected" chemistry for a site
+  # Options: typology_peers, geographic_neighbours, historical_self
+  method: typology_peers
+
+  # For typology_peers: compare each site to the median of its WFD type
+  # For geographic_neighbours: compare to k nearest sites by lat/lon
+  # For historical_self: compare current window to historical baseline
+  geographic_k: 20
+
+  # Mahalanobis distance percentile threshold for flagging
+  flag_percentile: 95
+
+  # Minimum observations required for a site to be scored
+  min_observations: 10
+
+peer_analysis:
+  umap_shortlist_k: 50
+  final_peer_k: 5
+  cross_type_threshold: 0.4
+  strong_agreement_threshold: 0.8
+
+# ── Narrate settings ──
+narrate:
+  # Top N sites to generate full narratives for
+  top_n: 10000
+
+  # Determinand-level thresholds for "notable" deviation (in std devs from type mean)
+  notable_std_threshold: 2.0
+
+# ── Temporal settings ──
+# For future use: sliding window analysis
+temporal:
+  baseline_years: [2015, 2022]  # historical baseline period
+  current_window_months: 6      # most recent N months = "current" chemistry
+
+# Quality gates run between pipeline layers and halt publishing on failure.
+quality_gates:
+  gate_1:
+    row_count_tolerance: 0.15
+    min_site_count: 10000
+    max_null_rate: 0.05
+    min_years: 5
+    min_regions: 5
+    value_ranges:
+      pH: [0, 14]
+      Temperature of Water: [-5, 45]
+      Oxygen, Dissolved, % Saturation: [0, 500]
+
+  gate_2:
+    known_bad_sites:
+      - "AN-NETL5"
+      - "NW-88024185"
+      - "NW-88000857"
+      - "AN-MT2405"
+    known_bad_max_rank: 50
+    known_clean_sites: []
+    known_clean_min_rank: 500
+    min_spearman: 0.85
+    min_skewness: 1.0
+    flagged_count_range: [200, 800]
+    max_global_fallback_pct: 0.10
+
+  gate_3:
+    min_summary_length: 50
+    lat_bounds: [49.9, 55.8]
+    lon_bounds: [-6.4, 1.8]
+    file_size_mb_range: [1, 15]

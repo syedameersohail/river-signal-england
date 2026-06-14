@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-family: Inter, "IBM Plex Sans", "Source Sans Pro", Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+.maplibregl-popup-content {
+  border-radius: 0.5rem;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 14px 36px rgba(17, 24, 39, 0.18);
+  padding: 0;
+  overflow: hidden;
+}
+
+.map-tooltip {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 240px;
+  padding: 0.75rem;
+  color: #111827;
+  font-family: Inter, "IBM Plex Sans", "Source Sans Pro", Arial, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.map-tooltip span {
+  color: #475569;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid rgba(13, 115, 119, 0.35);
+  outline-offset: 2px;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

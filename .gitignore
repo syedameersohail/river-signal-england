@@ -1,0 +1,41 @@
+# Python cache files
+__pycache__/
+*.pyc
+
+# OS files
+.DS_Store
+
+# Local prompts and notes in the repository root
+/*.md
+!/README.md
+
+# Reference and regenerated data
+/notebooks/
+/data/raw/
+/data/processed/
+/data/archive/
+*.pkl
+
+# Generated output not required by the deployed frontend
+/data/output/release_diff.json
+/data/output/site_summaries.json
+/data/output/gate3_meta.json
+/data/output/gate_report.json
+
+# Frontend dependencies and build output
+/frontend/node_modules/
+/frontend/dist/
+
+# Local environment files
+.env
+.env.*
+
+# Required tracked project files and folders
+!/README.md
+!/config/
+!/src/
+!/tests/
+!/frontend/src/
+!/frontend/public/
+!/data/output/
+!/data/output/ranked_feed.json
