@@ -14,9 +14,8 @@ import {
   confidenceFillClass,
   confidenceFrequencyText,
   confidenceMeta,
-  describePeerAgreement,
+  describePeerMatch,
   peerContextSentence,
-  severityPercentileNote,
   severityShortDescription,
   siteConfidence,
 } from "../utils/labels";
@@ -74,28 +73,13 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Metric label="National rank" value={`Ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally`} />
-            <Metric
-              label="Severity"
-              value={
-                <span>
-                  <span>{severityShortDescription(severity)}</span>
-                  {severityPercentileNote(severity) ? (
-                    <span className="mt-1 block text-xs font-normal text-slate-400">
-                      {severityPercentileNote(severity)}
-                    </span>
-                  ) : null}
-                </span>
-              }
-            />
+            <Metric label="Severity" value={severityShortDescription(severity)} />
             <Metric label="Compared with" value={comparisonLabel(site)} />
             <Metric
-              label="Chemical neighbourhood"
+              label="Does this river match its type?"
               value={
                 <span>
-                  <span>{describePeerAgreement(site.peer_agreement_ratio)}</span>
-                  <span className="mt-2 block text-xs font-normal leading-5 text-slate-400">
-                    River Signal finds the 5 rivers most chemically similar to this site anywhere in England, then checks whether they share the same official river type.
-                  </span>
+                  <span>{describePeerMatch(site.peer_agreement_ratio)}</span>
                 </span>
               }
             />
@@ -322,9 +306,9 @@ function ChemicalPatternSection({ site }: { site: SiteEntry }) {
 
   return (
     <section>
-      <h3 className="text-base font-semibold text-ink">Chemical pattern vs official type</h3>
+      <h3 className="text-base font-semibold text-ink">Does this river match its type?</h3>
       <p className="mt-2 text-sm leading-6 text-slate-700">
-        {chemicalPatternSentence(site)}
+        {describePeerMatch(site.peer_agreement_ratio)}
       </p>
       {showMismatch ? (
         <div className="mt-3 rounded-lg border border-amber-500 bg-amber-50 p-4 text-amber-950">
@@ -358,31 +342,6 @@ function ChemicalPatternSection({ site }: { site: SiteEntry }) {
       ) : null}
     </section>
   );
-}
-
-function chemicalPatternSentence(site: SiteEntry, k = 5): string {
-  const ratio = site.peer_agreement_ratio;
-  if (ratio == null || Number.isNaN(ratio)) {
-    return "Chemical neighbourhood data is not available for this site.";
-  }
-
-  const matching = Math.round(ratio * k);
-  const officialType = site.wfd_type || site.wfd_type_resolved || "official river type";
-  const dominantPeerType = firstKnown(site.dominant_peer_type, site.wfd_type_resolved) || "other monitored";
-
-  if (matching === 0) {
-    return `None of this river's closest chemical matches share its official ${officialType} classification. Its chemistry is closer to ${dominantPeerType} rivers.`;
-  }
-
-  if (ratio <= 0.4) {
-    return `Only ${matching} of this river's ${k} closest chemical matches share its official ${officialType} classification. Its chemistry is closer to ${dominantPeerType} rivers.`;
-  }
-
-  if (ratio >= 0.8) {
-    return `This river's closest chemical matches are mostly other ${officialType} rivers, confirming its chemistry fits its natural classification.`;
-  }
-
-  return `${matching} of this river's ${k} closest chemical matches share its ${officialType} classification.`;
 }
 
 function SimpleComparisonTable({ drivers, site }: { drivers: Driver[]; site: SiteEntry }) {

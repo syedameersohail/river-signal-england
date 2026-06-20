@@ -97,10 +97,15 @@ function App() {
   );
   const visibleSites = localSearchActive ? filteredSites : filteredSites.slice(0, 250);
   const hasSidebarFilters = Object.values(filters).some(Boolean);
-  const crossTypeCount = useMemo(
-    () => data?.feed.filter((site) => site.is_cross_type).length ?? 0,
-    [data],
-  );
+  const siteCounts = useMemo(() => {
+    const feed = data?.feed ?? [];
+
+    return {
+      crossType: feed.filter((site) => site.is_cross_type).length,
+      flagged: feed.filter((site) => site.is_flagged).length,
+      total: feed.length,
+    };
+  }, [data]);
 
   function handleLocationFound(location: GeoPoint, label: string) {
     if (!data) {
@@ -181,20 +186,21 @@ function App() {
                 Is your local river healthy? We check the water at 8,857 rivers across England and show you which ones don't look right.
               </p>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-slatecopy sm:text-base">
-                We compare each river against others of the same type - same size, same landscape, same geology.
-                Rivers that look different from what you'd expect are ranked and explained here. All data comes from
-                the Environment Agency's public monitoring programme, covering 2015 to 2024.
+                We compare each river against others that are naturally similar - similar altitude, size, and geology.
+                Most rivers look normal for their type. The ones that stand out are ranked and explained here, so you
+                can see what's usual and what isn't. All data comes from the Environment Agency's public monitoring
+                programme, covering 2015 to 2024.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:min-w-[520px]">
               <Metric
                 active={metricFilter === "total"}
                 activeLabel="Showing all sites"
-                label="Total sites"
+                label="EA freshwater river sites"
                 onClick={() => handleMetricClick("total")}
-                subtitle="Monitored rivers in England"
+                subtitle="Sampling points where the Environment Agency regularly tests river water quality"
                 title="The number of Environment Agency river monitoring points included in this analysis."
-                value={data?.total_sites.toLocaleString("en-GB") ?? "..."}
+                value={data ? siteCounts.total.toLocaleString("en-GB") : "..."}
               />
               <Metric
                 active={metricFilter === "flagged"}
@@ -204,7 +210,7 @@ function App() {
                 onClick={() => handleMetricClick("flagged")}
                 subtitle="Sites with the most unusual readings"
                 title="Sites in the top 5% nationally for unusual chemistry. These are statistical outliers - sites whose chemical profile deviates most from other rivers of the same type. This is not a legal or regulatory threshold."
-                value={data?.flagged_sites.toLocaleString("en-GB") ?? "..."}
+                value={data ? siteCounts.flagged.toLocaleString("en-GB") : "..."}
               />
               <Metric
                 active={metricFilter === "crossType"}
@@ -213,7 +219,7 @@ function App() {
                 onClick={() => handleMetricClick("crossType")}
                 subtitle="Water doesn't match what's expected for their geology and size"
                 title="Sites whose chemistry does not match their official river type classification."
-                value={crossTypeCount.toLocaleString("en-GB")}
+                value={data ? siteCounts.crossType.toLocaleString("en-GB") : "..."}
               />
             </div>
           </header>

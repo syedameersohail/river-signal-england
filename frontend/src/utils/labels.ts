@@ -48,12 +48,11 @@ export function peerContextSentence(site: SiteEntry): string {
 }
 
 export function severityDescription(severity: SeverityBand): string {
-  // Approximate score bands for the current feed; keep in sync with backend percentile config.
   const descriptions: Record<SeverityBand, string> = {
-    Extreme: "Chemistry is highly unusual compared with similar rivers. In the top 1% nationally.",
-    High: "Chemistry is notably unusual. In the top 5% nationally.",
-    Moderate: "Chemistry shows some differences from similar rivers, but within a wider range.",
-    Lower: "Chemistry is broadly consistent with similar rivers.",
+    Extreme: "This river's water is very different from other rivers like it",
+    High: "This river's water is noticeably different from other rivers like it",
+    Moderate: "Some differences from other rivers like it",
+    Lower: "Water is similar to other rivers like it",
   };
 
   return descriptions[severity];
@@ -61,40 +60,36 @@ export function severityDescription(severity: SeverityBand): string {
 
 export function severityShortDescription(severity: SeverityBand): string {
   const descriptions: Record<SeverityBand, string> = {
-    Extreme: "Very few similar rivers look like this",
-    High: "Most similar rivers do not look like this",
-    Moderate: "Some differences from similar rivers",
-    Lower: "Broadly consistent with similar rivers",
+    Extreme: "This river's water is very different from other rivers like it",
+    High: "This river's water is noticeably different from other rivers like it",
+    Moderate: "Some differences from other rivers like it",
+    Lower: "Water is similar to other rivers like it",
   };
 
   return descriptions[severity];
 }
 
-export function severityPercentileNote(severity: SeverityBand): string | null {
-  const notes: Partial<Record<SeverityBand, string>> = {
-    Extreme: "(top 1% nationally)",
-    High: "(top 5% nationally)",
-  };
-
-  return notes[severity] ?? null;
-}
-
-export function describePeerAgreement(ratio: number | null | undefined, k = 5): string {
+export function describePeerMatch(ratio: number | null | undefined, k = 5): string {
   if (ratio == null || Number.isNaN(ratio)) {
-    return "Chemical neighbourhood not available";
+    return "Chemical neighbourhood data is not available for this site.";
   }
 
-  const matching = Math.round(ratio * k);
-  if (matching === 0) {
-    return "None of its chemical neighbours are the same river type";
+  const n = Math.round(ratio * k);
+  const intro = `We compared this river's water with the ${k} most similar rivers across England.`;
+
+  if (n === 0) {
+    return `${intro} None of the ${k} are the same type of river, which suggests something may be changing this river's natural character.`;
   }
-  if (matching === k) {
-    return "All chemical neighbours are the same river type";
+  if (n <= 2) {
+    return `${intro} Only ${n} out of ${k} ${n === 1 ? "is" : "are"} the same type of river, which suggests this river may not be behaving as expected for its type.`;
   }
-  if (matching === 1) {
-    return `Only 1 in ${k} chemical neighbours are the same river type`;
+  if (n <= 3) {
+    return `${intro} ${n} out of ${k} matching rivers are the same type, suggesting this river mostly fits its natural setting.`;
   }
-  return `${matching} in ${k} chemical neighbours are the same river type`;
+  if (n <= 4) {
+    return `${intro} ${n} out of ${k} are the same type, suggesting this river's water fits its natural setting.`;
+  }
+  return `${intro} All ${k} are the same type. This river's water fits what you'd expect for its natural setting.`;
 }
 
 export function confidenceMeta(site: SiteEntry): {
