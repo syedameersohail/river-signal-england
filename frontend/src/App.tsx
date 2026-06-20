@@ -29,6 +29,7 @@ import type {
 import { nearestSites } from "./utils/distance";
 
 type ViewMode = "feed" | "map" | "about";
+type MetricFilter = "total" | "flagged" | "crossType" | null;
 
 const MapView = lazy(() => import("./components/MapView"));
 const LocalMapPreview = lazy(() =>
@@ -55,6 +56,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [localSearch, setLocalSearch] = useState<LocalSearchState>(initialLocalSearch);
+  const [metricFilter, setMetricFilter] = useState<MetricFilter>(null);
   const [selectedSite, setSelectedSite] = useState<SiteEntry | null>(null);
   const [view, setView] = useState<ViewMode>("feed");
 
@@ -64,16 +66,41 @@ function App() {
       .catch((loadError: Error) => setError(loadError.message));
   }, []);
 
+  useEffect(() => {
+    if (!data) {
+      return;
+    }
+
+    const siteId = new URLSearchParams(window.location.search).get("site");
+    if (!siteId) {
+      return;
+    }
+
+    const linkedSite = data.feed.find((site) => site.site_id === siteId);
+    if (linkedSite) {
+      setSelectedSite(linkedSite);
+      setView("feed");
+    }
+  }, [data]);
+
   const localSearchActive = localSearch.status === "ready";
   const baseSites = localSearchActive ? localSearch.results : data?.feed ?? [];
+  const metricFilteredSites = useMemo(
+    () => applyMetricFilter(baseSites, metricFilter),
+    [baseSites, metricFilter],
+  );
   const regions = useMemo(() => uniqueRegions(baseSites), [baseSites]);
   const drivers = useMemo(() => uniqueDrivers(baseSites), [baseSites]);
   const filteredSites = useMemo(
-    () => filterSites(baseSites, filters),
-    [baseSites, filters],
+    () => filterSites(metricFilteredSites, filters),
+    [metricFilteredSites, filters],
   );
   const visibleSites = localSearchActive ? filteredSites : filteredSites.slice(0, 250);
-  const hasFilters = Object.values(filters).some(Boolean);
+  const hasSidebarFilters = Object.values(filters).some(Boolean);
+  const crossTypeCount = useMemo(
+    () => data?.feed.filter((site) => site.is_cross_type).length ?? 0,
+    [data],
+  );
 
   function handleLocationFound(location: GeoPoint, label: string) {
     if (!data) {
@@ -95,6 +122,9 @@ function App() {
       results,
       status: "ready",
     });
+    if (metricFilter === "total") {
+      setMetricFilter(null);
+    }
     setView("feed");
   }
 
@@ -109,6 +139,34 @@ function App() {
   function resetAllFilters() {
     setFilters(initialFilters);
     setLocalSearch(initialLocalSearch);
+    setMetricFilter(null);
+  }
+
+  function handleFilterChange(nextFilters: Filters) {
+    setFilters(nextFilters);
+    if (metricFilter === "total") {
+      setMetricFilter(null);
+    }
+  }
+
+  function clearSidebarFilters() {
+    setFilters(initialFilters);
+    if (metricFilter === "total") {
+      setMetricFilter(null);
+    }
+  }
+
+  function handleMetricClick(nextFilter: Exclude<MetricFilter, null>) {
+    setView("feed");
+
+    if (nextFilter === "total") {
+      setFilters(initialFilters);
+      setLocalSearch(initialLocalSearch);
+      setMetricFilter("total");
+      return;
+    }
+
+    setMetricFilter((current) => (current === nextFilter ? null : nextFilter));
   }
 
   return (
@@ -120,29 +178,42 @@ function App() {
           <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-4xl">
               <p className="max-w-4xl text-2xl font-semibold leading-snug text-slate-900 sm:text-3xl">
-                Explore freshwater river chemistry across England, with unusual sites ranked, compared, and explained in plain English.
+                Is your local river healthy? We check the water at 8,857 rivers across England and show you which ones don't look right.
               </p>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-slatecopy sm:text-base">
-                Covers 8,857 Environment Agency monitoring sites on rivers and running surface waters,
-                analysed across 12 chemical indicators. Does not include estuaries, canals, lakes,
-                coastal waters, groundwater, or drinking water quality.
+                We compare each river against others of the same type - same size, same landscape, same geology.
+                Rivers that look different from what you'd expect are ranked and explained here. All data comes from
+                the Environment Agency's public monitoring programme, covering 2015 to 2024.
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-3 lg:min-w-[420px]">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:min-w-[520px]">
               <Metric
+                active={metricFilter === "total"}
+                activeLabel="Showing all sites"
                 label="Total sites"
+                onClick={() => handleMetricClick("total")}
+                subtitle="Monitored rivers in England"
                 title="The number of Environment Agency river monitoring points included in this analysis."
                 value={data?.total_sites.toLocaleString("en-GB") ?? "..."}
               />
               <Metric
-                label="Flagged"
-                title="Sites in the top 5% nationally for unusual chemistry. These are the sites where water quality differs most from what is expected for that type of river."
+                active={metricFilter === "flagged"}
+                activeClassName="border-b-amber-600"
+                activeLabel="Showing flagged sites only"
+                label="Unusual chemistry"
+                onClick={() => handleMetricClick("flagged")}
+                subtitle="Sites with the most unusual readings"
+                title="Sites in the top 5% nationally for unusual chemistry. These are statistical outliers - sites whose chemical profile deviates most from other rivers of the same type. This is not a legal or regulatory threshold."
                 value={data?.flagged_sites.toLocaleString("en-GB") ?? "..."}
               />
               <Metric
-                label="Fully profiled"
-                title="Sites with a complete chemical health summary explaining what's normal or unusual about their water quality."
-                value={data?.total_sites.toLocaleString("en-GB") ?? "..."}
+                active={metricFilter === "crossType"}
+                activeLabel="Showing out-of-character sites"
+                label="Unexpected for river type"
+                onClick={() => handleMetricClick("crossType")}
+                subtitle="Water doesn't match what's expected for their geology and size"
+                title="Sites whose chemistry does not match their official river type classification."
+                value={crossTypeCount.toLocaleString("en-GB")}
               />
             </div>
           </header>
@@ -173,12 +244,12 @@ function App() {
             <FilterPanel
               drivers={drivers}
               filters={filters}
-              onChange={setFilters}
-              onReset={() => setFilters(initialFilters)}
+              onChange={handleFilterChange}
+              onReset={clearSidebarFilters}
               onResetAll={resetAllFilters}
               regions={regions}
               resultCount={filteredSites.length}
-              hasFilters={hasFilters}
+              hasFilters={hasSidebarFilters}
             />
           </aside>
 
@@ -308,21 +379,62 @@ function NavButton({
 }
 
 interface MetricProps {
+  active?: boolean;
+  activeClassName?: string;
+  activeLabel?: string;
   label: string;
+  onClick: () => void;
+  subtitle: string;
   title?: string;
   value: string;
 }
 
-function Metric({ label, title, value }: MetricProps) {
+function Metric({
+  active = false,
+  activeClassName = "border-b-teal-600",
+  activeLabel,
+  label,
+  onClick,
+  subtitle,
+  title,
+  value,
+}: MetricProps) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-100 p-3" title={title}>
+    <button
+      aria-label={`${label} metric filter`}
+      aria-pressed={active}
+      className={`rounded-lg border border-slate-200 p-3 text-left transition hover:bg-slate-50 hover:shadow-sm ${
+        active
+          ? `border-b-2 bg-slate-50 ${activeClassName}`
+          : "cursor-pointer bg-slate-100"
+      }`}
+      onClick={onClick}
+      title={title}
+      type="button"
+    >
       <p className="inline-flex items-center gap-1.5 text-sm text-slate-500">
         {label}
         {title ? <InfoIcon aria-hidden="true" className="h-3.5 w-3.5" /> : null}
       </p>
       <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
-    </div>
+      <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>
+      {active && activeLabel ? (
+        <p className="mt-1 text-xs font-semibold text-slate-600">{activeLabel}</p>
+      ) : null}
+    </button>
   );
+}
+
+function applyMetricFilter(sites: SiteEntry[], filter: MetricFilter): SiteEntry[] {
+  if (filter === "flagged") {
+    return sites.filter((site) => site.is_flagged);
+  }
+
+  if (filter === "crossType") {
+    return sites.filter((site) => site.is_cross_type);
+  }
+
+  return sites;
 }
 
 function LoadingPanel({ label }: { label: string }) {
@@ -843,8 +955,14 @@ function AboutBlock({ children, title }: { children: ReactNode; title: string })
 function Footer() {
   return (
     <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-5 text-sm text-slate-600 sm:px-6 lg:px-8">
-        Data: Environment Agency open monitoring data. Analysis: independent research.
+      <div className="mx-auto max-w-7xl space-y-2 px-4 py-5 text-sm text-slate-600 sm:px-6 lg:px-8">
+        <p>Data: Environment Agency open monitoring data. Analysis: independent research.</p>
+        <p className="text-xs leading-5 text-slate-500">
+          River Signal is an independent analytical tool. It is not an official pollution report,
+          regulatory assessment, or real-time alert system. Findings are based on statistical
+          comparison of publicly available Environment Agency monitoring data and should be
+          interpreted as signals for further investigation, not confirmed pollution events.
+        </p>
       </div>
     </footer>
   );

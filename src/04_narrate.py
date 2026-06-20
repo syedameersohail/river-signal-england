@@ -11,7 +11,7 @@ Output: data/output/ranked_feed.json
 
 import json
 import math
-from datetime import datetime
+from datetime import date, datetime
 
 import polars as pl
 
@@ -140,6 +140,91 @@ def _site_name(row: dict) -> str:
     return row.get("site_label") or row.get("site_name") or row.get("site_id") or "Unknown site"
 
 
+def clean_site_name(name: str) -> str:
+    """Title case but preserve common abbreviations."""
+    cleaned = str(name).title()
+    for word in ["Of", "The", "At", "On", "In", "To", "And"]:
+        cleaned = cleaned.replace(f" {word} ", f" {word.lower()} ")
+    return cleaned
+
+
+def _display_name(row: dict) -> str:
+    return clean_site_name(_site_name(row))
+
+
+def _site_meta_value(row: dict, key: str):
+    value = row.get(key)
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
+
+
+def _iso_date(row: dict, key: str) -> str | None:
+    value = _site_meta_value(row, key)
+    if value is None:
+        return None
+    if hasattr(value, "date") and callable(value.date):
+        return value.date().isoformat()
+    if hasattr(value, "isoformat") and callable(value.isoformat):
+        return value.isoformat()
+    return str(value)
+
+
+def _date_value(row: dict, key: str) -> date | None:
+    value = _site_meta_value(row, key)
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except ValueError:
+        return None
+
+
+def _last_sample_year(row: dict) -> int | None:
+    value = _date_value(row, "last_sample")
+    return value.year if value else None
+
+
+def _avg_days_between_visits(row: dict) -> float | None:
+    value = _site_meta_value(row, "avg_days_between_visits")
+    if value is None:
+        return None
+    return round(float(value), 1)
+
+
+def get_confidence_tier(visits, last_sample_year, config: dict) -> str:
+    confidence_config = config.get("data_confidence", {})
+    well_config = confidence_config.get("well_monitored", {})
+    moderate_config = confidence_config.get("moderate", {})
+
+    well_visits = int(well_config.get("min_visits", 30))
+    well_year = int(well_config.get("min_last_sample_year", 2023))
+    moderate_visits = int(moderate_config.get("min_visits", 12))
+    moderate_year = int(moderate_config.get("min_last_sample_year", 2020))
+
+    visits = int(visits or 0)
+    last_sample_year = int(last_sample_year or 0)
+
+    visit_tier = (
+        "well" if visits >= well_visits
+        else "moderate" if visits >= moderate_visits
+        else "limited"
+    )
+    recency_tier = (
+        "well" if last_sample_year >= well_year
+        else "moderate" if last_sample_year >= moderate_year
+        else "limited"
+    )
+    tiers = {"limited": 0, "moderate": 1, "well": 2}
+    return min(visit_tier, recency_tier, key=lambda tier: tiers[tier])
+
+
 def _resolved_wfd_type(row: dict) -> str | None:
     return row.get("wfd_type_resolved") or row.get("wfd_type")
 
@@ -207,28 +292,7 @@ def _peer_fields(row: dict) -> dict:
 
 
 def _normal_summary(row: dict) -> str:
-    site_name = _site_name(row)
-    original_wfd_type = row.get("wfd_type")
-    resolved_wfd_type = row.get("wfd_type_resolved")
-    dominant_peer_type = row.get("dominant_peer_type")
-
-    if original_wfd_type:
-        return (
-            f"This stretch of {site_name} shows chemistry consistent with similar "
-            f"{original_wfd_type} rivers nationally. No unusual patterns detected."
-        )
-
-    if resolved_wfd_type or dominant_peer_type:
-        inferred_type = resolved_wfd_type or dominant_peer_type
-        return (
-            f"This site has no official WFD classification, but its chemistry is consistent "
-            f"with {inferred_type} rivers based on peer analysis. No unusual patterns detected."
-        )
-
-    return (
-        "This site's chemistry falls within the normal range when compared against all "
-        "monitored sites nationally."
-    )
+    return "Chemistry is consistent with similar rivers. No unusual patterns detected."
 
 
 def _driver_names(driver_details: list[dict]) -> list[str]:
@@ -319,6 +383,53 @@ def _public_flagged_summary(driver_details: list[dict]) -> str:
     )
 
 
+def _driver_sentence(driver_details: list[dict]) -> str:
+    descriptions = [str(driver["description"]).rstrip(".") for driver in driver_details]
+    if not descriptions:
+        return "No single chemical measure dominates the result."
+    if len(descriptions) == 1:
+        return f"The main signal is {descriptions[0]}."
+    return f"The main signals are {'; '.join(descriptions)}."
+
+
+def _remaining_drivers_sentence(driver_details: list[dict]) -> str:
+    if len(driver_details) <= 1:
+        return "No other single chemical measure dominates the result."
+    return _driver_sentence(driver_details[1:])
+
+
+def _flagged_summary(row: dict, driver_details: list[dict]) -> str:
+    site_label = _display_name(row)
+    rank = int(row["anomaly_rank"])
+    peer_count = row.get("score_peer_group_size") or 0
+    peer_count_text = f"{int(peer_count):,}" if peer_count else "other"
+    wfd_type = _resolved_wfd_type(row) or row.get("score_reference") or "comparable"
+    water_body_name = row.get("water_body_name")
+    region = row.get("region") or "this region"
+
+    drivers_sentence = _driver_sentence(driver_details)
+    top_driver_plain = driver_details[0]["label"] if driver_details else "unusual chemistry"
+
+    template_index = rank % 4
+    if template_index == 1:
+        return f"{site_label} ranks #{rank} nationally. {drivers_sentence}"
+    if template_index == 2:
+        return (
+            f"Elevated {top_driver_plain} stands out at {site_label}, which ranks #{rank} "
+            f"nationally for unusual chemistry. {_remaining_drivers_sentence(driver_details)}"
+        )
+    if template_index == 3:
+        return (
+            f"Among {peer_count_text} similar {wfd_type} rivers, {site_label} is one of the "
+            f"most chemically unusual (ranked #{rank} nationally). {drivers_sentence}"
+        )
+    location = f"On the {water_body_name} in {region}" if water_body_name else f"In {region}"
+    return (
+        f"{location}, {site_label} shows chemistry that stands out from comparable rivers. "
+        f"{drivers_sentence} It ranks #{rank} nationally."
+    )
+
+
 def narrate_site(row: dict, feature_cols: list[str], config: dict) -> dict:
     """Generate a plain-English summary for a single site."""
     drivers_str = row.get("anomaly_drivers") or ""
@@ -335,6 +446,8 @@ def narrate_site(row: dict, feature_cols: list[str], config: dict) -> dict:
     site_name = _site_name(row)
     rank = int(row["anomaly_rank"])
     score = float(row["anomaly_score"])
+    visits = _site_meta_value(row, "distinct_sample_dates")
+    confidence_tier = get_confidence_tier(visits, _last_sample_year(row), config)
 
     if not bool(row.get("is_flagged", False)):
         summary = _normal_summary(row)
@@ -347,11 +460,12 @@ def narrate_site(row: dict, feature_cols: list[str], config: dict) -> dict:
             "The pattern should be investigated further."
         )
     else:
-        summary = _public_flagged_summary(driver_details)
+        summary = _flagged_summary(row, driver_details)
 
     return {
         "site_id": row["site_id"],
         "site_label": site_name,
+        "display_name": _display_name(row),
         "lat": row.get("lat"),
         "lon": row.get("lon"),
         "region": row.get("region"),
@@ -363,6 +477,12 @@ def narrate_site(row: dict, feature_cols: list[str], config: dict) -> dict:
         "flag_threshold": row.get("flag_threshold"),
         "score_reference": row.get("score_reference"),
         "score_peer_group_size": row.get("score_peer_group_size"),
+        "total_observations": _site_meta_value(row, "total_observations"),
+        "first_sample": _iso_date(row, "first_sample"),
+        "last_sample": _iso_date(row, "last_sample"),
+        "distinct_sample_dates": _site_meta_value(row, "distinct_sample_dates"),
+        "avg_days_between_visits": _avg_days_between_visits(row),
+        "confidence_tier": confidence_tier,
         "drivers": driver_details,
         "summary": summary,
         "wfd_type": row.get("wfd_type"),
@@ -375,9 +495,12 @@ def narrate_site(row: dict, feature_cols: list[str], config: dict) -> dict:
 
 
 def minimal_site(row: dict) -> dict:
+    config = load_config()
+    visits = _site_meta_value(row, "distinct_sample_dates")
     return {
         "site_id": row["site_id"],
         "site_label": _site_name(row),
+        "display_name": _display_name(row),
         "lat": row.get("lat"),
         "lon": row.get("lon"),
         "anomaly_rank": int(row["anomaly_rank"]),
@@ -386,6 +509,12 @@ def minimal_site(row: dict) -> dict:
         "top_anomaly_driver": row.get("top_anomaly_driver"),
         "top_anomaly_driver_z": row.get("top_anomaly_driver_z"),
         "summary": _normal_summary(row),
+        "total_observations": _site_meta_value(row, "total_observations"),
+        "first_sample": _iso_date(row, "first_sample"),
+        "last_sample": _iso_date(row, "last_sample"),
+        "distinct_sample_dates": _site_meta_value(row, "distinct_sample_dates"),
+        "avg_days_between_visits": _avg_days_between_visits(row),
+        "confidence_tier": get_confidence_tier(visits, _last_sample_year(row), config),
         "wfd_type": row.get("wfd_type"),
         "wfd_type_resolved": row.get("wfd_type_resolved"),
         "wfd_type_inferred": bool(row.get("wfd_type_inferred", False)),

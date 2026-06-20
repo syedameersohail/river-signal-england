@@ -76,6 +76,14 @@ peer_analysis:
   cross_type_threshold: 0.4
   strong_agreement_threshold: 0.8
 
+data_confidence:
+  well_monitored:
+    min_visits: 30
+    min_last_sample_year: 2023
+  moderate:
+    min_visits: 12
+    min_last_sample_year: 2020
+
 # ── Narrate settings ──
 narrate:
   # Top N sites to generate full narratives for

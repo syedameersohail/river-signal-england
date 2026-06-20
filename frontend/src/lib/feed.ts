@@ -115,6 +115,7 @@ export function filterSites(feed: SiteEntry[], filters: Filters): SiteEntry[] {
     const drivers = site.drivers ?? [];
     const searchable = [
       site.site_label,
+      site.display_name,
       site.site_id,
       site.water_body_name,
       site.region,
@@ -140,7 +141,7 @@ export function buildSummary(site: SiteEntry): string {
   }
 
   const severity = getSeverity(site.anomaly_score);
-  const place = titleCaseSiteName(site.site_label);
+  const place = site.display_name || titleCaseSiteName(site.site_label);
   return `${place} is ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally for unusual chemistry. Severity: ${severity}. More detail will appear when the next narrated feed is generated.`;
 }
 
