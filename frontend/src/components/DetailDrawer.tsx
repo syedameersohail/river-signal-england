@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Droplets, ExternalLink, Link2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import {
@@ -74,10 +74,10 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             <p className="whitespace-pre-line text-lg leading-relaxed text-slate-800">{buildSummary(site)}</p>
           </section>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric label="National rank" value={`Ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally`} />
-            <Metric label="Severity" value={severityShortDescription(severity)} />
-            <Metric label="Compared with" value={comparisonLabel(site)} />
+          <div className="grid grid-cols-3 gap-2">
+            <CompactMetric label="National rank" value={`#${site.anomaly_rank.toLocaleString("en-GB")}`} />
+            <CompactMetric label="Severity" value={severity} />
+            <CompactMetric label="Peer group" value={comparisonLabel(site)} />
           </div>
 
           <SimpleComparisonTable drivers={drivers} site={site} />
@@ -143,6 +143,8 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
               </p>
             </div>
           </section>
+
+          {site.incidents?.has_any_incidents ? <IncidentsContextSection site={site} /> : null}
 
           <DataQualitySection confidence={confidence} site={site} />
 
@@ -213,6 +215,53 @@ function ConfidenceEvidenceBar({ site }: { site: SiteEntry }) {
       </div>
     </div>
   );
+}
+
+function IncidentsContextSection({ site }: { site: SiteEntry }) {
+  const inc = site.incidents;
+  if (!inc) return null;
+
+  return (
+    <section className="my-6 border-b border-t border-slate-200 bg-slate-50 px-4 py-6 md:px-6">
+      <div className="flex items-center gap-2">
+        <Droplets aria-hidden="true" className="h-5 w-5 text-indigo-600" />
+        <h3 className="text-lg font-semibold text-slate-900">Context: Known Discharges & Incidents</h3>
+      </div>
+      <p className="mt-1 text-sm text-slate-500">
+        Environment Agency records of pollution and sewage spills within 2km.
+      </p>
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        {inc.total_pollution_incidents > 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-3xl font-bold text-indigo-700">{inc.total_pollution_incidents}</p>
+            <p className="text-sm text-slate-600">General Pollution Incidents</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Most recent: {inc.most_recent_pollution_date || "Unknown"} {"•"} Cause: {inc.primary_pollution_cause || "Unknown"}
+            </p>
+          </div>
+        ) : null}
+        {inc.total_edm_spills > 0 ? (
+          <div className="rounded-lg border border-slate-200 bg-white p-4">
+            <p className="text-3xl font-bold text-indigo-700">{inc.total_edm_spills}</p>
+            <p className="text-sm text-slate-600">Sewage Discharges (CSO)</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {formatSpillHours(inc.total_spill_hours)} total hours of discharge
+            </p>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Most recent: {inc.most_recent_spill_date || "Unknown"}
+            </p>
+          </div>
+        ) : null}
+      </div>
+      <p className="mt-4 text-xs italic text-slate-400">
+        Note: Incidents are mapped by proximity. Water flow direction may affect when a discharge reaches this monitoring point.
+      </p>
+    </section>
+  );
+}
+
+function formatSpillHours(hours: number): string {
+  return Number.isInteger(hours) ? hours.toLocaleString("en-GB") : hours.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 function ActionsSection({
@@ -525,6 +574,15 @@ function Metric({ label, value }: { label: string; value: ReactNode }) {
     <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-1 break-words text-lg font-semibold leading-snug text-slate-900 sm:text-xl">{value}</p>
+    </div>
+  );
+}
+
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">{value}</p>
     </div>
   );
 }

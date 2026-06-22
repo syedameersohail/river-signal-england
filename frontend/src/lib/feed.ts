@@ -1,4 +1,4 @@
-import type { Filters, RankedFeed, SeverityBand, SiteEntry } from "../types";
+import type { Filters, IncidentFilter, RankedFeed, SeverityBand, SiteEntry } from "../types";
 
 export const productNames = ["River Signal"];
 
@@ -131,9 +131,19 @@ export function filterSites(feed: SiteEntry[], filters: Filters): SiteEntry[] {
       (!filters.severity || severity === filters.severity) &&
       (!filters.driver || drivers.some((driver) => driver.name === filters.driver)) &&
       (filters.confidenceTiers.length === 0 || filters.confidenceTiers.some((tier) => confidenceTierMatches(site.confidence_tier, tier))) &&
-      (!query || searchable.includes(query))
+      (!query || searchable.includes(query)) &&
+      matchesIncidentFilter(site, filters.incidentFilter)
     );
   });
+}
+
+function matchesIncidentFilter(site: SiteEntry, filter: IncidentFilter): boolean {
+  if (!filter) return true;
+  const inc = site.incidents;
+  if (filter === "has_incidents") return Boolean(inc?.has_any_incidents);
+  if (filter === "has_spills") return Boolean(inc && inc.total_edm_spills > 0);
+  if (filter === "high_count") return Boolean(inc && inc.total_all_incidents > 10);
+  return true;
 }
 
 function confidenceTierMatches(

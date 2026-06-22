@@ -42,6 +42,18 @@ export interface SiteEntry {
   is_cross_type: boolean;
   is_strong_agreement: boolean;
   peer_site_ids: string[];
+  incidents?: IncidentData;
+}
+
+export interface IncidentData {
+  total_pollution_incidents: number;
+  most_recent_pollution_date: string | null;
+  primary_pollution_cause: string | null;
+  total_edm_spills: number;
+  total_spill_hours: number;
+  most_recent_spill_date: string | null;
+  has_any_incidents: boolean;
+  total_all_incidents: number;
 }
 
 export interface LocalSiteEntry extends SiteEntry {
@@ -66,12 +78,15 @@ export interface FeedData extends RankedFeed {}
 
 export type SeverityBand = "Extreme" | "High" | "Moderate" | "Lower";
 
+export type IncidentFilter = "" | "has_incidents" | "has_spills" | "high_count";
+
 export interface Filters {
   confidenceTiers: Array<NonNullable<SiteEntry["confidence_tier"]>>;
   region: string;
   severity: string;
   driver: string;
   query: string;
+  incidentFilter: IncidentFilter;
 }
 
 export interface GeoPoint {
