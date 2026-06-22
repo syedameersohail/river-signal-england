@@ -36,6 +36,14 @@ META_COLS = [
     "site_status",
 ]
 
+OBSERVATION_META_COLS = [
+    "first_sample",
+    "last_sample",
+    "total_observations",
+    "distinct_sample_dates",
+    "avg_days_between_visits",
+]
+
 YEAR_START = 2015
 YEAR_END = 2024
 MIN_SITES_PER_DETERMINAND = 200
@@ -208,6 +216,38 @@ def build_site_metadata(df: pl.DataFrame) -> pl.DataFrame:
     return df.group_by("site_id").agg(exprs)
 
 
+def build_site_observation_metadata(df: pl.DataFrame) -> pl.DataFrame:
+    """Per-site sampling coverage used for frontend confidence indicators."""
+    dt_col = _first_existing(df.columns, "sample_dt", "sample_datetime")
+    if dt_col is None:
+        return df.group_by("site_id").agg(
+            pl.lit(None).cast(pl.Date).alias("first_sample"),
+            pl.lit(None).cast(pl.Date).alias("last_sample"),
+            pl.col("value").count().alias("total_observations"),
+            pl.lit(None).cast(pl.UInt32).alias("distinct_sample_dates"),
+            pl.lit(None).cast(pl.Float64).alias("avg_days_between_visits"),
+        )
+
+    return (
+        df.group_by("site_id")
+        .agg(
+            pl.col(dt_col).min().alias("first_sample"),
+            pl.col(dt_col).max().alias("last_sample"),
+            pl.col("value").count().alias("total_observations"),
+            pl.col(dt_col).n_unique().alias("distinct_sample_dates"),
+        )
+        .with_columns(
+            pl.when(pl.col("distinct_sample_dates") > 1)
+            .then(
+                (pl.col("last_sample") - pl.col("first_sample")).dt.total_days()
+                / pl.col("distinct_sample_dates")
+            )
+            .otherwise(None)
+            .alias("avg_days_between_visits")
+        )
+    )
+
+
 def build_signatures(df: pl.DataFrame, config: dict) -> pl.DataFrame:
     """
     Build the site chemistry matrix from cleaned observations.
@@ -242,10 +282,15 @@ def build_signatures_from_stats(
         aggregate_function="first",
     )
 
-    site_meta = build_site_metadata(df)
+    site_meta = build_site_metadata(df).join(
+        build_site_observation_metadata(df),
+        on="site_id",
+        how="left",
+    )
     signatures = site_meta.join(site_matrix, on="site_id", how="inner")
 
-    feature_cols = [c for c in signatures.columns if c not in META_COLS]
+    metadata_cols = META_COLS + OBSERVATION_META_COLS
+    feature_cols = [c for c in signatures.columns if c not in metadata_cols]
     if not feature_cols:
         raise ValueError("No feature columns were created from the cleaned observations.")
 
@@ -256,7 +301,7 @@ def build_signatures_from_stats(
     if not keep_features:
         raise ValueError("No feature columns met the 60% site coverage threshold.")
 
-    signatures = signatures.select(META_COLS + keep_features)
+    signatures = signatures.select(metadata_cols + keep_features)
 
     signatures = signatures.with_columns(
         pl.sum_horizontal([pl.col(c).is_not_null().cast(pl.Int8) for c in keep_features]).alias(
@@ -291,7 +336,9 @@ def fit_umap(signatures: pl.DataFrame, config: dict) -> tuple[pl.DataFrame, obje
     from sklearn.preprocessing import StandardScaler
 
     feature_cols = [
-        c for c in signatures.columns if c not in META_COLS and c != "n_features_present"
+        c
+        for c in signatures.columns
+        if c not in META_COLS + OBSERVATION_META_COLS and c != "n_features_present"
     ]
     if not feature_cols:
         raise ValueError("No feature columns available for UMAP.")

@@ -115,6 +115,7 @@ export function filterSites(feed: SiteEntry[], filters: Filters): SiteEntry[] {
     const drivers = site.drivers ?? [];
     const searchable = [
       site.site_label,
+      site.display_name,
       site.site_id,
       site.water_body_name,
       site.region,
@@ -129,9 +130,21 @@ export function filterSites(feed: SiteEntry[], filters: Filters): SiteEntry[] {
       (!filters.region || site.region === filters.region) &&
       (!filters.severity || severity === filters.severity) &&
       (!filters.driver || drivers.some((driver) => driver.name === filters.driver)) &&
+      (filters.confidenceTiers.length === 0 || filters.confidenceTiers.some((tier) => confidenceTierMatches(site.confidence_tier, tier))) &&
       (!query || searchable.includes(query))
     );
   });
+}
+
+function confidenceTierMatches(
+  siteTier: SiteEntry["confidence_tier"],
+  filterTier: NonNullable<SiteEntry["confidence_tier"]>,
+): boolean {
+  if (filterTier === "well-monitored" || filterTier === "well") {
+    return siteTier === "well" || siteTier === "well-monitored";
+  }
+
+  return siteTier === filterTier;
 }
 
 export function buildSummary(site: SiteEntry): string {
@@ -140,7 +153,7 @@ export function buildSummary(site: SiteEntry): string {
   }
 
   const severity = getSeverity(site.anomaly_score);
-  const place = titleCaseSiteName(site.site_label);
+  const place = site.display_name || titleCaseSiteName(site.site_label);
   return `${place} is ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally for unusual chemistry. Severity: ${severity}. More detail will appear when the next narrated feed is generated.`;
 }
 

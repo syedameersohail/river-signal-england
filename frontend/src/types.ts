@@ -12,6 +12,7 @@ export interface Driver {
 export interface SiteEntry {
   site_id: string;
   site_label: string;
+  display_name?: string;
   lat: number;
   lon: number;
   region?: string;
@@ -23,6 +24,12 @@ export interface SiteEntry {
   flag_threshold?: number;
   score_reference?: string;
   score_peer_group_size?: number;
+  total_observations?: number | null;
+  first_sample?: string | null;
+  last_sample?: string | null;
+  distinct_sample_dates?: number | null;
+  avg_days_between_visits?: number | null;
+  confidence_tier?: "well" | "well-monitored" | "moderate" | "limited";
   drivers?: Driver[];
   summary?: string;
   wfd_type?: string;
@@ -60,6 +67,7 @@ export interface FeedData extends RankedFeed {}
 export type SeverityBand = "Extreme" | "High" | "Moderate" | "Lower";
 
 export interface Filters {
+  confidenceTiers: Array<NonNullable<SiteEntry["confidence_tier"]>>;
   region: string;
   severity: string;
   driver: string;

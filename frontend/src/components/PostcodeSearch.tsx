@@ -5,12 +5,15 @@ import { getCurrentPosition, lookupPostcode } from "../utils/postcode";
 
 interface PostcodeSearchProps {
   disabled?: boolean;
+  embedded?: boolean;
   error: string | null;
   hasActiveSearch: boolean;
+  inputId?: string;
   isLoading: boolean;
   onClear: () => void;
   onError: (message: string) => void;
   onLocationFound: (location: GeoPoint, label: string) => void;
+  showLabel?: boolean;
 }
 
 function useDebouncedValue(value: string, delayMs: number): string {
@@ -26,12 +29,15 @@ function useDebouncedValue(value: string, delayMs: number): string {
 
 function PostcodeSearch({
   disabled = false,
+  embedded = false,
   error,
   hasActiveSearch,
+  inputId = "postcode-search",
   isLoading,
   onClear,
   onError,
   onLocationFound,
+  showLabel = true,
 }: PostcodeSearchProps) {
   const [postcode, setPostcode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,15 +76,17 @@ function PostcodeSearch({
 
   return (
     <form
-      className="rounded-lg border border-slate-200 bg-white p-4"
+      className={embedded ? "" : "rounded-lg border border-slate-200 bg-white p-4"}
       onSubmit={(event) => {
         event.preventDefault();
         void submitPostcode();
       }}
     >
-      <label className="block text-sm font-semibold text-ink" htmlFor="postcode-search">
-        Enter your postcode
-      </label>
+      {showLabel ? (
+        <label className="block text-sm font-semibold text-ink" htmlFor={inputId}>
+          Enter your postcode
+        </label>
+      ) : null}
       <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto]">
         <div className="flex min-w-0 items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-riverblue focus-within:ring-2 focus-within:ring-riverblue/20">
           <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
@@ -86,7 +94,7 @@ function PostcodeSearch({
             autoComplete="postal-code"
             className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm uppercase outline-none"
             disabled={disabled || isBusy}
-            id="postcode-search"
+            id={inputId}
             onChange={(event) => {
               setPostcode(event.target.value);
               if (!event.target.value && hasActiveSearch) {

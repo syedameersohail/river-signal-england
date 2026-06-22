@@ -1,4 +1,5 @@
-import { AlertTriangle, CheckCircle2, ExternalLink, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, ExternalLink, Link2, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState } from "react";
 import {
   buildSummary,
@@ -9,6 +10,15 @@ import {
   titleCaseSiteName,
 } from "../lib/feed";
 import type { Driver, SeverityBand, SiteEntry } from "../types";
+import {
+  confidenceFillClass,
+  confidenceFrequencyText,
+  confidenceMeta,
+  describePeerMatch,
+  peerContextSentence,
+  severityShortDescription,
+  siteConfidence,
+} from "../utils/labels";
 
 interface DetailDrawerProps {
   featureNames: string[];
@@ -18,6 +28,7 @@ interface DetailDrawerProps {
 
 function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
   const [showScientificData, setShowScientificData] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
 
   if (!site) {
     return null;
@@ -25,9 +36,7 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
 
   const severity = getSeverity(site.anomaly_score);
   const drivers = site.drivers ?? [];
-  const summary = publicSummary(site);
-  const peerAgreement =
-    site.peer_agreement_ratio == null ? null : Math.round(site.peer_agreement_ratio * 100);
+  const confidence = siteConfidence(site);
 
   return (
     <div aria-modal="true" className="fixed inset-0 z-50" role="dialog">
@@ -43,8 +52,11 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             <div>
               <p className="font-mono text-sm text-riverblue">{site.site_id}</p>
               <h2 className="mt-1 text-2xl font-semibold leading-tight text-ink">
-                {titleCaseSiteName(site.site_label)}
+                {site.display_name || titleCaseSiteName(site.site_label)}
               </h2>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                This is an Environment Agency monitoring point name {"\u2014"} it describes where water samples are collected, not the source of any pollution
+              </p>
             </div>
             <button
               aria-label="Close"
@@ -58,16 +70,14 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
         </div>
 
         <div className="space-y-6 p-4 sm:p-5">
-          <section>
-            <h3 className="text-xl font-semibold leading-snug text-ink">{summary.heading}</h3>
-            <p className="mt-3 whitespace-pre-line text-lg leading-relaxed text-slate-800">{summary.body}</p>
+          <section aria-label="Site summary">
+            <p className="whitespace-pre-line text-lg leading-relaxed text-slate-800">{buildSummary(site)}</p>
           </section>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="National rank" value={`Ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally`} />
-            <Metric label="Severity" value={severity} />
+            <Metric label="Severity" value={severityShortDescription(severity)} />
             <Metric label="Compared with" value={comparisonLabel(site)} />
-            <Metric label="Peer agreement" value={peerAgreementKeyFact(peerAgreement)} />
           </div>
 
           <SimpleComparisonTable drivers={drivers} site={site} />
@@ -128,33 +138,162 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             <div className="flex items-start gap-3">
               <AlertTriangle aria-hidden="true" className="mt-1 h-5 w-5 shrink-0 text-riverblue" />
               <p className="text-sm leading-6 text-slate-700">
-                Compared against{" "}
-                <span className="font-semibold text-ink">
-                  {site.score_peer_group_size?.toLocaleString("en-GB") ?? "similar"}
-                </span>{" "}
-                {site.score_reference || "national"} sites. The black line on the chart represents
-                expected chemistry for similar sites.
+                {peerContextSentence(site)} The black line on the chart represents expected
+                chemistry for similar sites.
               </p>
             </div>
           </section>
 
-          <a
-            className="inline-flex items-center gap-2 rounded-md border border-riverblue bg-riverblue px-4 py-2 text-sm font-semibold text-white hover:bg-riverblue-dark"
-            href={eaMonitoringUrl(site.site_id)}
-            rel="noreferrer"
-            target="_blank"
-          >
-            Open Environment Agency record
-            <ExternalLink aria-hidden="true" className="h-4 w-4" />
-          </a>
+          <DataQualitySection confidence={confidence} site={site} />
+
+          <ActionsSection
+            onDownload={() => downloadSiteData(site)}
+            onShare={async () => {
+              const copied = await copyShareLink(site.site_id);
+              setShareStatus(copied ? "Link copied" : "Could not copy link");
+              window.setTimeout(() => setShareStatus(""), 2000);
+            }}
+            shareStatus={shareStatus}
+            site={site}
+          />
+
+          <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm leading-6 text-slate-700">
+              This analysis identifies unusual chemistry, not confirmed pollution. For official
+              information about this site, view the Environment Agency record. To report a
+              pollution incident, call the EA hotline: 0800 80 70 60.
+            </p>
+          </section>
         </div>
       </aside>
     </div>
   );
 }
 
+function DataQualitySection({
+  confidence,
+  site,
+}: {
+  confidence: ReturnType<typeof siteConfidence>;
+  site: SiteEntry;
+}) {
+  const meta = confidenceMeta(site);
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h3 className="text-base font-semibold text-ink">Data confidence</h3>
+      <div className="mt-3 space-y-1 text-sm leading-6 text-slate-700">
+        <p className="inline-flex items-center gap-2 font-semibold text-slate-800">
+          <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${confidence.dotClass}`} />
+          {confidence.label}
+        </p>
+        <p>{meta.chemicalMeasurements} across {meta.samplingDates}</p>
+        <p>{meta.dateRange}</p>
+        <p>{confidenceFrequencyText(site)}</p>
+        <ConfidenceEvidenceBar site={site} />
+      </div>
+    </section>
+  );
+}
+
+function ConfidenceEvidenceBar({ site }: { site: SiteEntry }) {
+  const meta = confidenceMeta(site);
+
+  return (
+    <div className="pt-2">
+      <div className="flex items-center gap-3">
+        <div className="h-1 flex-1 rounded-full bg-slate-200">
+          <div
+            aria-hidden="true"
+            className={`h-1 rounded-full ${confidenceFillClass(site)}`}
+            style={{ width: `${meta.evidence.fillPercent}%` }}
+          />
+        </div>
+        <span className="shrink-0 text-xs text-slate-400">{meta.evidence.label}</span>
+      </div>
+    </div>
+  );
+}
+
+function ActionsSection({
+  onDownload,
+  onShare,
+  shareStatus,
+  site,
+}: {
+  onDownload: () => void;
+  onShare: () => void;
+  shareStatus: string;
+  site: SiteEntry;
+}) {
+  return (
+    <section>
+      <h3 className="text-base font-semibold text-ink">Actions</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <ActionLink href={eaMonitoringUrl(site.site_id)}>
+          View EA record
+          <ExternalLink aria-hidden="true" className="h-4 w-4" />
+        </ActionLink>
+        <ActionLink href="https://www.gov.uk/report-an-environmental-incident">
+          Report a concern
+          <ExternalLink aria-hidden="true" className="h-4 w-4" />
+        </ActionLink>
+        <button
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
+          onClick={onShare}
+          type="button"
+        >
+          Share
+          <Link2 aria-hidden="true" className="h-4 w-4" />
+        </button>
+        <button
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
+          onClick={onDownload}
+          type="button"
+        >
+          Download data
+          <Download aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </div>
+      {shareStatus ? <p className="mt-2 text-sm font-semibold text-riverblue">{shareStatus}</p> : null}
+    </section>
+  );
+}
+
+function ActionLink({ children, href }: { children: ReactNode; href: string }) {
+  return (
+    <a
+      className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {children}
+    </a>
+  );
+}
+
+async function copyShareLink(siteId: string): Promise<boolean> {
+  const url = `${window.location.origin}?site=${encodeURIComponent(siteId)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function downloadSiteData(site: SiteEntry) {
+  const blob = new Blob([JSON.stringify(site, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `river-signal-${site.site_id}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function ChemicalPatternSection({ site }: { site: SiteEntry }) {
-  const agreement = site.peer_agreement_ratio == null ? null : Math.round(site.peer_agreement_ratio * 100);
   const officialType = site.wfd_type || "Unknown";
   const resolvedType = firstKnown(site.wfd_type_resolved, site.dominant_peer_type) || "Unknown";
   const dominantPeerType = firstKnown(site.dominant_peer_type, site.wfd_type_resolved) || "other monitored";
@@ -162,9 +301,9 @@ function ChemicalPatternSection({ site }: { site: SiteEntry }) {
 
   return (
     <section>
-      <h3 className="text-base font-semibold text-ink">Chemical pattern vs official type</h3>
+      <h3 className="text-base font-semibold text-ink">Does this river match its type?</h3>
       <p className="mt-2 text-sm leading-6 text-slate-700">
-        {peerAgreementSentence(agreement)}
+        {describePeerMatch(site.peer_agreement_ratio)}
       </p>
       {showMismatch ? (
         <div className="mt-3 rounded-lg border border-amber-500 bg-amber-50 p-4 text-amber-950">
@@ -198,34 +337,6 @@ function ChemicalPatternSection({ site }: { site: SiteEntry }) {
       ) : null}
     </section>
   );
-}
-
-function publicSummary(site: SiteEntry): { body: string; heading: string } {
-  const text = buildSummary(site).trim();
-  const [firstParagraph, ...rest] = text.split(/\n\s*\n/);
-  const heading = firstParagraph.replace(/\s+stand out here\.$/i, ".").replace(/\.$/, "");
-  const body = rest.join("\n\n").trim() || firstParagraph;
-
-  return {
-    heading: heading || "Unusual river chemistry",
-    body,
-  };
-}
-
-function peerAgreementKeyFact(agreement: number | null): string {
-  if (agreement == null) {
-    return "Not available";
-  }
-
-  if (agreement === 20) {
-    return "About 1 in 5 similar rivers";
-  }
-
-  if (agreement > 0 && agreement <= 50) {
-    return `${agreement}% of similar rivers`;
-  }
-
-  return `${agreement}% of similar rivers`;
 }
 
 function SimpleComparisonTable({ drivers, site }: { drivers: Driver[]; site: SiteEntry }) {
@@ -409,23 +520,7 @@ function firstKnown(...values: Array<string | null | undefined>): string | null 
   return values.find((value) => value && value !== "Unknown") ?? null;
 }
 
-function peerAgreementSentence(agreement: number | null): string {
-  if (agreement == null) {
-    return "Peer agreement is not available for this site.";
-  }
-
-  if (agreement === 20) {
-    return "Only about 1 in 5 similar rivers look chemically like this one. Peer agreement: 20%.";
-  }
-
-  if (agreement > 0 && agreement <= 50) {
-    return `Peer agreement: ${agreement}%. Only about ${agreement} in 100 similar rivers look chemically like this.`;
-  }
-
-  return `Peer agreement: ${agreement}%. Most similar rivers look chemically like this.`;
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
       <p className="text-sm text-slate-500">{label}</p>
