@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDown, ArrowUp } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Droplets } from "lucide-react";
 import {
   buildSummary,
   getSeverity,
@@ -115,6 +115,12 @@ function FeedCard({ onOpen, site }: FeedCardProps) {
                     {topDriver(site)}
                   </span>
                 )}
+                {site.incidents?.has_any_incidents ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                    <Droplets aria-hidden="true" className="h-3 w-3" />
+                    {site.incidents.total_all_incidents} Incidents
+                  </span>
+                ) : null}
               </div>
               <div className="mt-4 flex justify-end">
                 <span className="text-sm font-semibold text-riverblue hover:underline">View details -&gt;</span>
