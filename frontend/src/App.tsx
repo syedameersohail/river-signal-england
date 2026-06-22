@@ -1,5 +1,6 @@
 import {
   ChevronDown,
+  Droplets,
   ExternalLink,
   Filter,
   InfoIcon,
@@ -21,6 +22,7 @@ import {
 import type {
   Filters,
   GeoPoint,
+  IncidentFilter,
   LocalSearchState,
   LocalSiteEntry,
   RankedFeed,
@@ -32,6 +34,13 @@ type ViewMode = "feed" | "map" | "about";
 type MetricFilter = "total" | "flagged" | "crossType" | null;
 type ConfidenceFilterTier = NonNullable<SiteEntry["confidence_tier"]>;
 type ConfidenceCountKey = "well-monitored" | "moderate" | "limited";
+
+const incidentFilterOptions: Array<{ label: string; value: IncidentFilter }> = [
+  { label: "All rivers", value: "" },
+  { label: "Has pollution incidents", value: "has_incidents" },
+  { label: "Has sewage spills", value: "has_spills" },
+  { label: "High incident count (>10)", value: "high_count" },
+];
 
 const confidenceFilterOptions: Array<{ dotClass: string; label: string; tier: ConfidenceCountKey }> = [
   { dotClass: "bg-emerald-600", label: "Regularly sampled", tier: "well-monitored" },
@@ -50,6 +59,7 @@ const initialFilters: Filters = {
   severity: "",
   driver: "",
   query: "",
+  incidentFilter: "",
 };
 
 const initialLocalSearch: LocalSearchState = {
@@ -206,27 +216,17 @@ function App() {
       <Header view={view} onViewChange={setView} />
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-          <header className="max-w-5xl">
-            <p className="text-2xl font-semibold leading-snug text-slate-900 sm:text-3xl">
-              Is your local river healthy? We check the water at 8,857 rivers across England and show you which ones don't look right.
+        <div className="mx-auto max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
+          <p className="max-w-4xl text-base font-medium leading-snug text-slate-900 sm:text-lg">
+            Is your local river healthy? We check the water at 8,857 rivers across England and show you which ones don't look right.
+            {" "}<span className="font-normal text-slatecopy">Compared by altitude, size & geology. EA monitoring data, 2015{"–"}2024.</span>
+          </p>
+          {data ? (
+            <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-slate-500">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {formatDataCoverage(data)}
             </p>
-            <p className="mt-2 text-sm leading-6 text-slatecopy sm:text-base">
-              We compare each river against others that are naturally similar - similar altitude, size, and geology.
-              Most rivers look normal for their type. The ones that stand out are ranked and explained here, so you
-              can see what's usual and what isn't. All data comes from the Environment Agency's public monitoring
-              programme, covering 2015 to 2024.
-            </p>
-          </header>
-
-          <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            {data ? (
-              <p className="inline-flex items-center gap-2 text-sm text-slate-600">
-                <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                {formatDataCoverage(data)}
-              </p>
-            ) : null}
-          </div>
+          ) : null}
         </div>
       </section>
 
@@ -666,6 +666,7 @@ function hasActiveFilters(filters: Filters): boolean {
       filters.severity ||
       filters.driver ||
       filters.query ||
+      filters.incidentFilter ||
       filters.confidenceTiers.length > 0,
   );
 }
@@ -789,6 +790,32 @@ function FilterPanel({
                           {option.label} ({confidenceCounts[option.tier].toLocaleString("en-GB")})
                         </span>
                       </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <fieldset className="mt-4">
+              <legend className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <Droplets aria-hidden="true" className="h-3.5 w-3.5 text-indigo-600" />
+                Pollution incidents
+              </legend>
+              <div className="mt-2 grid gap-2">
+                {incidentFilterOptions.map((option) => {
+                  const isActive = filters.incidentFilter === option.value;
+                  return (
+                    <button
+                      aria-pressed={isActive}
+                      className={`flex items-center rounded-md border px-3 py-2 text-left text-sm font-semibold transition ${
+                        isActive
+                          ? "border-indigo-400 bg-indigo-50 text-indigo-900"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-indigo-400 hover:text-indigo-800"
+                      }`}
+                      key={option.value}
+                      onClick={() => onChange({ ...filters, incidentFilter: option.value })}
+                      type="button"
+                    >
+                      {option.label}
                     </button>
                   );
                 })}

@@ -78,12 +78,15 @@ export interface FeedData extends RankedFeed {}
 
 export type SeverityBand = "Extreme" | "High" | "Moderate" | "Lower";
 
+export type IncidentFilter = "" | "has_incidents" | "has_spills" | "high_count";
+
 export interface Filters {
   confidenceTiers: Array<NonNullable<SiteEntry["confidence_tier"]>>;
   region: string;
   severity: string;
   driver: string;
   query: string;
+  incidentFilter: IncidentFilter;
 }
 
 export interface GeoPoint {

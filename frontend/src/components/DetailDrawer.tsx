@@ -74,10 +74,10 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             <p className="whitespace-pre-line text-lg leading-relaxed text-slate-800">{buildSummary(site)}</p>
           </section>
 
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric label="National rank" value={`Ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally`} />
-            <Metric label="Severity" value={severityShortDescription(severity)} />
-            <Metric label="Compared with" value={comparisonLabel(site)} />
+          <div className="grid grid-cols-3 gap-2">
+            <CompactMetric label="National rank" value={`#${site.anomaly_rank.toLocaleString("en-GB")}`} />
+            <CompactMetric label="Severity" value={severity} />
+            <CompactMetric label="Peer group" value={comparisonLabel(site)} />
           </div>
 
           <SimpleComparisonTable drivers={drivers} site={site} />
@@ -574,6 +574,15 @@ function Metric({ label, value }: { label: string; value: ReactNode }) {
     <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-1 break-words text-lg font-semibold leading-snug text-slate-900 sm:text-xl">{value}</p>
+    </div>
+  );
+}
+
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">{value}</p>
     </div>
   );
 }
