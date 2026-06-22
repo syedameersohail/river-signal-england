@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   ChevronDown,
   Droplets,
   ExternalLink,
@@ -6,9 +7,11 @@ import {
   InfoIcon,
   List,
   Map as MapIcon,
+  MapPin,
+  RotateCcw,
   Search,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import DetailDrawer from "./components/DetailDrawer";
 import FeedCard from "./components/FeedCard";
@@ -231,6 +234,17 @@ function App() {
       </section>
 
       {view === "feed" ? (
+        <>
+        <StandardFiltersBar
+          confidenceCounts={confidenceCounts}
+          data={data}
+          filters={filters}
+          localSearch={localSearch}
+          onFilterChange={handleFilterChange}
+          onLocationFound={handleLocationFound}
+          onLocationError={handleLocalSearchError}
+          onResetAll={resetAllFilters}
+        />
         <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[320px_1fr] lg:px-8">
           {showDisclaimerBanner ? (
             <div className="lg:col-span-2">
@@ -249,28 +263,12 @@ function App() {
                   siteCounts={siteCounts}
                 />
               </CollapsibleSection>
-              <CollapsibleSection defaultOpen title="Enter your postcode">
-                <PostcodeSearch
-                  disabled={!data}
-                  embedded
-                  inputId="desktop-postcode-search"
-                  error={localSearch.status === "error" ? localSearch.error : null}
-                  hasActiveSearch={localSearch.status === "ready"}
-                  isLoading={localSearch.status === "loading"}
-                  onClear={resetAllFilters}
-                  onError={handleLocalSearchError}
-                  onLocationFound={handleLocationFound}
-                  showLabel={false}
-                />
-              </CollapsibleSection>
-              <FilterPanel
-                confidenceCounts={confidenceCounts}
+              <SidebarFilterPanel
                 drivers={drivers}
                 filters={filters}
                 hasFilters={hasSidebarFilters}
                 onChange={handleFilterChange}
                 onReset={clearSidebarFilters}
-                onResetAll={resetAllFilters}
                 regions={regions}
                 resultCount={filteredSites.length}
               />
@@ -286,53 +284,6 @@ function App() {
                 onMetricClick={handleMetricClick}
                 siteCounts={siteCounts}
               />
-              <button
-                aria-expanded={mobileFiltersOpen}
-                className="mt-3 inline-flex w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                onClick={() => setMobileFiltersOpen((current) => !current)}
-                type="button"
-              >
-                Filters
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`h-4 w-4 transition-transform duration-200 ${mobileFiltersOpen ? "rotate-180" : ""}`}
-                />
-              </button>
-              <div
-                className={`grid transition-[grid-template-rows] duration-200 ${
-                  mobileFiltersOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                }`}
-              >
-                <div className="min-h-0 overflow-hidden">
-                  <div className="mt-3 space-y-4 pb-2">
-                    <CollapsibleSection defaultOpen title="Enter your postcode">
-                      <PostcodeSearch
-                        disabled={!data}
-                        embedded
-                        inputId="mobile-postcode-search"
-                        error={localSearch.status === "error" ? localSearch.error : null}
-                        hasActiveSearch={localSearch.status === "ready"}
-                        isLoading={localSearch.status === "loading"}
-                        onClear={resetAllFilters}
-                        onError={handleLocalSearchError}
-                        onLocationFound={handleLocationFound}
-                        showLabel={false}
-                      />
-                    </CollapsibleSection>
-                    <FilterPanel
-                      confidenceCounts={confidenceCounts}
-                      drivers={drivers}
-                      filters={filters}
-                      hasFilters={hasSidebarFilters}
-                      onChange={handleFilterChange}
-                      onReset={clearSidebarFilters}
-                      onResetAll={resetAllFilters}
-                      regions={regions}
-                      resultCount={filteredSites.length}
-                    />
-                  </div>
-                </div>
-              </div>
             </div>
             {error ? <Notice tone="error">{error}</Notice> : null}
             {!data && !error ? <Notice>Loading the ranked chemistry feed...</Notice> : null}
@@ -367,6 +318,7 @@ function App() {
             ) : null}
           </section>
         </section>
+        </>
       ) : null}
       {view === "map" ? (
         <Suspense fallback={<LoadingPanel label="Loading the map..." />}>
@@ -681,29 +633,209 @@ function toggleConfidenceTier(filters: Filters, tier: ConfidenceFilterTier): Fil
   };
 }
 
-interface FilterPanelProps {
+interface StandardFiltersBarProps {
   confidenceCounts: Record<ConfidenceCountKey, number>;
+  data: RankedFeed | null;
+  filters: Filters;
+  localSearch: LocalSearchState;
+  onFilterChange: (filters: Filters) => void;
+  onLocationFound: (location: GeoPoint, label: string) => void;
+  onLocationError: (message: string) => void;
+  onResetAll: () => void;
+}
+
+function StandardFiltersBar({
+  confidenceCounts,
+  data,
+  filters,
+  localSearch,
+  onFilterChange,
+  onLocationFound,
+  onLocationError,
+  onResetAll,
+}: StandardFiltersBarProps) {
+  const [openDropdown, setOpenDropdown] = useState<"postcode" | "confidence" | "incidents" | null>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  const closeDropdown = useCallback((event: MouseEvent) => {
+    if (barRef.current && !barRef.current.contains(event.target as Node)) {
+      setOpenDropdown(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (openDropdown) {
+      document.addEventListener("mousedown", closeDropdown);
+      return () => document.removeEventListener("mousedown", closeDropdown);
+    }
+  }, [openDropdown, closeDropdown]);
+
+  function toggle(name: typeof openDropdown) {
+    setOpenDropdown((current) => (current === name ? null : name));
+  }
+
+  const activeConfidenceCount = filters.confidenceTiers.length;
+  const activeIncidentLabel = incidentFilterOptions.find((o) => o.value === filters.incidentFilter)?.label;
+  const hasAnyFilter = Boolean(
+    filters.confidenceTiers.length || filters.incidentFilter || filters.region || filters.severity || filters.driver || filters.query || localSearch.status === "ready",
+  );
+
+  return (
+    <div className="border-b border-slate-200 bg-slate-50" ref={barRef}>
+      <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="relative">
+            <button
+              className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
+                localSearch.status === "ready"
+                  ? "border-riverblue bg-riverblue/10 text-riverblue"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+              }`}
+              onClick={() => toggle("postcode")}
+              type="button"
+            >
+              <MapPin aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">{localSearch.status === "ready" ? `Near ${localSearch.label}` : "Postcode"}</span>
+              <span className="sm:hidden">Location</span>
+              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${openDropdown === "postcode" ? "rotate-180" : ""}`} />
+            </button>
+            {openDropdown === "postcode" ? (
+              <div className="absolute left-0 top-full z-20 mt-1.5 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                <PostcodeSearch
+                  disabled={!data}
+                  embedded
+                  inputId="bar-postcode-search"
+                  error={localSearch.status === "error" ? localSearch.error : null}
+                  hasActiveSearch={localSearch.status === "ready"}
+                  isLoading={localSearch.status === "loading"}
+                  onClear={onResetAll}
+                  onError={onLocationError}
+                  onLocationFound={(...args) => { onLocationFound(...args); setOpenDropdown(null); }}
+                  showLabel={false}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="relative">
+            <button
+              className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
+                activeConfidenceCount > 0
+                  ? "border-riverblue bg-riverblue/10 text-riverblue"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+              }`}
+              onClick={() => toggle("confidence")}
+              type="button"
+            >
+              <BarChart3 aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">Data confidence</span>
+              <span className="sm:hidden">Confidence</span>
+              {activeConfidenceCount > 0 ? (
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-riverblue px-1.5 text-xs font-bold text-white">
+                  {activeConfidenceCount}
+                </span>
+              ) : (
+                <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${openDropdown === "confidence" ? "rotate-180" : ""}`} />
+              )}
+            </button>
+            {openDropdown === "confidence" ? (
+              <div className="absolute left-0 top-full z-20 mt-1.5 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+                {confidenceFilterOptions.map((option) => {
+                  const isActive = filters.confidenceTiers.includes(option.tier);
+                  return (
+                    <button
+                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition ${
+                        isActive ? "bg-riverblue/10 font-semibold text-ink" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                      key={option.tier}
+                      onClick={() => onFilterChange(toggleConfidenceTier(filters, option.tier))}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`} />
+                      {option.label} ({confidenceCounts[option.tier].toLocaleString("en-GB")})
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="relative">
+            <button
+              className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition ${
+                filters.incidentFilter
+                  ? "border-red-300 bg-red-600 text-white hover:bg-red-700"
+                  : "border-red-200 bg-red-600 text-white hover:bg-red-700"
+              }`}
+              onClick={() => toggle("incidents")}
+              type="button"
+            >
+              <Droplets aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">{filters.incidentFilter ? activeIncidentLabel : "Pollution incidents"}</span>
+              <span className="sm:hidden">Incidents</span>
+              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${openDropdown === "incidents" ? "rotate-180" : ""}`} />
+            </button>
+            {openDropdown === "incidents" ? (
+              <div className="absolute left-0 top-full z-20 mt-1.5 w-64 rounded-lg border border-slate-200 bg-white p-2 shadow-lg">
+                {incidentFilterOptions.map((option) => {
+                  const isActive = filters.incidentFilter === option.value;
+                  return (
+                    <button
+                      className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition ${
+                        isActive ? "bg-red-50 font-semibold text-red-900" : "text-slate-700 hover:bg-slate-50"
+                      }`}
+                      key={option.value}
+                      onClick={() => { onFilterChange({ ...filters, incidentFilter: option.value }); setOpenDropdown(null); }}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="ml-auto">
+            <button
+              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                hasAnyFilter
+                  ? "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                  : "cursor-default text-slate-400"
+              }`}
+              disabled={!hasAnyFilter}
+              onClick={onResetAll}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface SidebarFilterPanelProps {
   drivers: string[];
   filters: Filters;
   hasFilters: boolean;
   onChange: (filters: Filters) => void;
   onReset: () => void;
-  onResetAll: () => void;
   regions: string[];
   resultCount: number;
 }
 
-function FilterPanel({
-  confidenceCounts,
+function SidebarFilterPanel({
   drivers,
   filters,
   hasFilters,
   onChange,
   onReset,
-  onResetAll,
   regions,
   resultCount,
-}: FilterPanelProps) {
+}: SidebarFilterPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -767,60 +899,6 @@ function FilterPanel({
               options={drivers}
               value={filters.driver}
             />
-            <fieldset className="mt-4">
-              <legend className="block text-sm font-semibold text-ink">Data confidence</legend>
-              <div className="mt-2 grid gap-2">
-                {confidenceFilterOptions.map((option) => {
-                  const isActive = filters.confidenceTiers.includes(option.tier);
-                  return (
-                    <button
-                      aria-pressed={isActive}
-                      className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-semibold transition ${
-                        isActive
-                          ? "border-riverblue bg-riverblue/10 text-ink"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-riverblue hover:text-riverblue"
-                      }`}
-                      key={option.tier}
-                      onClick={() => onChange(toggleConfidenceTier(filters, option.tier))}
-                      type="button"
-                    >
-                      <span className="inline-flex min-w-0 items-center gap-2">
-                        <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`} />
-                        <span>
-                          {option.label} ({confidenceCounts[option.tier].toLocaleString("en-GB")})
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-            <fieldset className="mt-4">
-              <legend className="flex items-center gap-2 text-sm font-semibold text-ink">
-                <Droplets aria-hidden="true" className="h-3.5 w-3.5 text-indigo-600" />
-                Pollution incidents
-              </legend>
-              <div className="mt-2 grid gap-2">
-                {incidentFilterOptions.map((option) => {
-                  const isActive = filters.incidentFilter === option.value;
-                  return (
-                    <button
-                      aria-pressed={isActive}
-                      className={`flex items-center rounded-md border px-3 py-2 text-left text-sm font-semibold transition ${
-                        isActive
-                          ? "border-indigo-400 bg-indigo-50 text-indigo-900"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-indigo-400 hover:text-indigo-800"
-                      }`}
-                      key={option.value}
-                      onClick={() => onChange({ ...filters, incidentFilter: option.value })}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
           </div>
         </div>
       </div>
@@ -833,13 +911,6 @@ function FilterPanel({
           type="button"
         >
           Clear filters
-        </button>
-        <button
-          className="mt-2 w-full rounded-md border border-riverblue bg-riverblue px-3 py-2 text-sm font-semibold text-white transition hover:bg-riverblue-dark"
-          onClick={onResetAll}
-          type="button"
-        >
-          Reset all filters
         </button>
       </div>
     </form>
