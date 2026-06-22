@@ -130,9 +130,21 @@ export function filterSites(feed: SiteEntry[], filters: Filters): SiteEntry[] {
       (!filters.region || site.region === filters.region) &&
       (!filters.severity || severity === filters.severity) &&
       (!filters.driver || drivers.some((driver) => driver.name === filters.driver)) &&
+      (filters.confidenceTiers.length === 0 || filters.confidenceTiers.some((tier) => confidenceTierMatches(site.confidence_tier, tier))) &&
       (!query || searchable.includes(query))
     );
   });
+}
+
+function confidenceTierMatches(
+  siteTier: SiteEntry["confidence_tier"],
+  filterTier: NonNullable<SiteEntry["confidence_tier"]>,
+): boolean {
+  if (filterTier === "well-monitored" || filterTier === "well") {
+    return siteTier === "well" || siteTier === "well-monitored";
+  }
+
+  return siteTier === filterTier;
 }
 
 export function buildSummary(site: SiteEntry): string {

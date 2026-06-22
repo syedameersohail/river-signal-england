@@ -146,7 +146,7 @@ export function siteConfidence(site: SiteEntry): {
   dotClass: string;
   label: string;
 } {
-  if (site.confidence_tier === "well") {
+  if ((site.confidence_tier === "well" || site.confidence_tier === "well-monitored")) {
     return {
       band: "Strong",
       dotClass: "bg-emerald-600",
@@ -170,7 +170,7 @@ export function siteConfidence(site: SiteEntry): {
 }
 
 export function confidenceFillClass(site: SiteEntry): string {
-  if (site.confidence_tier === "well") {
+  if ((site.confidence_tier === "well" || site.confidence_tier === "well-monitored")) {
     return "bg-emerald-600";
   }
   if (site.confidence_tier === "moderate") {

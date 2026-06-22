@@ -54,6 +54,9 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
               <h2 className="mt-1 text-2xl font-semibold leading-tight text-ink">
                 {site.display_name || titleCaseSiteName(site.site_label)}
               </h2>
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                This is an Environment Agency monitoring point name {"\u2014"} it describes where water samples are collected, not the source of any pollution
+              </p>
             </div>
             <button
               aria-label="Close"
@@ -71,18 +74,10 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             <p className="whitespace-pre-line text-lg leading-relaxed text-slate-800">{buildSummary(site)}</p>
           </section>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="National rank" value={`Ranked #${site.anomaly_rank.toLocaleString("en-GB")} nationally`} />
             <Metric label="Severity" value={severityShortDescription(severity)} />
             <Metric label="Compared with" value={comparisonLabel(site)} />
-            <Metric
-              label="Does this river match its type?"
-              value={
-                <span>
-                  <span>{describePeerMatch(site.peer_agreement_ratio)}</span>
-                </span>
-              }
-            />
           </div>
 
           <SimpleComparisonTable drivers={drivers} site={site} />

@@ -29,7 +29,7 @@ export interface SiteEntry {
   last_sample?: string | null;
   distinct_sample_dates?: number | null;
   avg_days_between_visits?: number | null;
-  confidence_tier?: "well" | "moderate" | "limited";
+  confidence_tier?: "well" | "well-monitored" | "moderate" | "limited";
   drivers?: Driver[];
   summary?: string;
   wfd_type?: string;
@@ -67,6 +67,7 @@ export interface FeedData extends RankedFeed {}
 export type SeverityBand = "Extreme" | "High" | "Moderate" | "Lower";
 
 export interface Filters {
+  confidenceTiers: Array<NonNullable<SiteEntry["confidence_tier"]>>;
   region: string;
   severity: string;
   driver: string;

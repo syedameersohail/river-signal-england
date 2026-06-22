@@ -30,6 +30,14 @@ import { nearestSites } from "./utils/distance";
 
 type ViewMode = "feed" | "map" | "about";
 type MetricFilter = "total" | "flagged" | "crossType" | null;
+type ConfidenceFilterTier = NonNullable<SiteEntry["confidence_tier"]>;
+type ConfidenceCountKey = "well-monitored" | "moderate" | "limited";
+
+const confidenceFilterOptions: Array<{ dotClass: string; label: string; tier: ConfidenceCountKey }> = [
+  { dotClass: "bg-emerald-600", label: "Regularly sampled", tier: "well-monitored" },
+  { dotClass: "bg-amber-500", label: "Roughly monitored", tier: "moderate" },
+  { dotClass: "bg-slate-400", label: "Limited data", tier: "limited" },
+];
 
 const MapView = lazy(() => import("./components/MapView"));
 const LocalMapPreview = lazy(() =>
@@ -37,6 +45,7 @@ const LocalMapPreview = lazy(() =>
 );
 
 const initialFilters: Filters = {
+  confidenceTiers: [],
   region: "",
   severity: "",
   driver: "",
@@ -59,11 +68,19 @@ function App() {
   const [metricFilter, setMetricFilter] = useState<MetricFilter>(null);
   const [selectedSite, setSelectedSite] = useState<SiteEntry | null>(null);
   const [view, setView] = useState<ViewMode>("feed");
+  const [showDisclaimerBanner, setShowDisclaimerBanner] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   useEffect(() => {
     loadRankedFeed()
       .then(setData)
       .catch((loadError: Error) => setError(loadError.message));
+
+    try {
+      setShowDisclaimerBanner(localStorage.getItem("river_signal_banner_dismissed") !== "true");
+    } catch {
+      setShowDisclaimerBanner(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -96,7 +113,8 @@ function App() {
     [metricFilteredSites, filters],
   );
   const visibleSites = localSearchActive ? filteredSites : filteredSites.slice(0, 250);
-  const hasSidebarFilters = Object.values(filters).some(Boolean);
+  const hasSidebarFilters = hasActiveFilters(filters);
+  const confidenceCounts = useMemo(() => countConfidenceTiers(baseSites), [baseSites]);
   const siteCounts = useMemo(() => {
     const feed = data?.feed ?? [];
 
@@ -161,6 +179,15 @@ function App() {
     }
   }
 
+  function dismissDisclaimerBanner() {
+    setShowDisclaimerBanner(false);
+    try {
+      localStorage.setItem("river_signal_banner_dismissed", "true");
+    } catch {
+      // Private browsing can block localStorage writes.
+    }
+  }
+
   function handleMetricClick(nextFilter: Exclude<MetricFilter, null>) {
     setView("feed");
 
@@ -180,48 +207,16 @@ function App() {
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8">
-          <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-4xl">
-              <p className="max-w-4xl text-2xl font-semibold leading-snug text-slate-900 sm:text-3xl">
-                Is your local river healthy? We check the water at 8,857 rivers across England and show you which ones don't look right.
-              </p>
-              <p className="mt-2 max-w-4xl text-sm leading-6 text-slatecopy sm:text-base">
-                We compare each river against others that are naturally similar - similar altitude, size, and geology.
-                Most rivers look normal for their type. The ones that stand out are ranked and explained here, so you
-                can see what's usual and what isn't. All data comes from the Environment Agency's public monitoring
-                programme, covering 2015 to 2024.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:min-w-[520px]">
-              <Metric
-                active={metricFilter === "total"}
-                activeLabel="Showing all sites"
-                label="EA freshwater river sites"
-                onClick={() => handleMetricClick("total")}
-                subtitle="Sampling points where the Environment Agency regularly tests river water quality"
-                title="The number of Environment Agency river monitoring points included in this analysis."
-                value={data ? siteCounts.total.toLocaleString("en-GB") : "..."}
-              />
-              <Metric
-                active={metricFilter === "flagged"}
-                activeClassName="border-b-amber-600"
-                activeLabel="Showing flagged sites only"
-                label="Unusual chemistry"
-                onClick={() => handleMetricClick("flagged")}
-                subtitle="Sites with the most unusual readings"
-                title="Sites in the top 5% nationally for unusual chemistry. These are statistical outliers - sites whose chemical profile deviates most from other rivers of the same type. This is not a legal or regulatory threshold."
-                value={data ? siteCounts.flagged.toLocaleString("en-GB") : "..."}
-              />
-              <Metric
-                active={metricFilter === "crossType"}
-                activeLabel="Showing out-of-character sites"
-                label="Unexpected for river type"
-                onClick={() => handleMetricClick("crossType")}
-                subtitle="Water doesn't match what's expected for their geology and size"
-                title="Sites whose chemistry does not match their official river type classification."
-                value={data ? siteCounts.crossType.toLocaleString("en-GB") : "..."}
-              />
-            </div>
+          <header className="max-w-5xl">
+            <p className="text-2xl font-semibold leading-snug text-slate-900 sm:text-3xl">
+              Is your local river healthy? We check the water at 8,857 rivers across England and show you which ones don't look right.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-slatecopy sm:text-base">
+              We compare each river against others that are naturally similar - similar altitude, size, and geology.
+              Most rivers look normal for their type. The ones that stand out are ranked and explained here, so you
+              can see what's usual and what isn't. All data comes from the Environment Agency's public monitoring
+              programme, covering 2015 to 2024.
+            </p>
           </header>
 
           <div className="flex flex-col gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -237,29 +232,108 @@ function App() {
 
       {view === "feed" ? (
         <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[320px_1fr] lg:px-8">
-          <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-            <PostcodeSearch
-              disabled={!data}
-              error={localSearch.status === "error" ? localSearch.error : null}
-              hasActiveSearch={localSearch.status === "ready"}
-              isLoading={localSearch.status === "loading"}
-              onClear={resetAllFilters}
-              onError={handleLocalSearchError}
-              onLocationFound={handleLocationFound}
-            />
-            <FilterPanel
-              drivers={drivers}
-              filters={filters}
-              onChange={handleFilterChange}
-              onReset={clearSidebarFilters}
-              onResetAll={resetAllFilters}
-              regions={regions}
-              resultCount={filteredSites.length}
-              hasFilters={hasSidebarFilters}
-            />
+          {showDisclaimerBanner ? (
+            <div className="lg:col-span-2">
+              <DisclaimerBanner onDismiss={dismissDisclaimerBanner} />
+            </div>
+          ) : null}
+
+          <aside className="hidden max-h-[calc(100vh-4.5rem)] overflow-y-auto overscroll-contain pb-8 sm:sticky sm:top-[4.5rem] sm:block lg:self-start">
+            <div className="space-y-4">
+              <CollapsibleSection defaultOpen title="Show me">
+                <QuickFilters
+                  hasData={Boolean(data)}
+                  layout="stack"
+                  metricFilter={metricFilter}
+                  onMetricClick={handleMetricClick}
+                  siteCounts={siteCounts}
+                />
+              </CollapsibleSection>
+              <CollapsibleSection defaultOpen title="Enter your postcode">
+                <PostcodeSearch
+                  disabled={!data}
+                  embedded
+                  inputId="desktop-postcode-search"
+                  error={localSearch.status === "error" ? localSearch.error : null}
+                  hasActiveSearch={localSearch.status === "ready"}
+                  isLoading={localSearch.status === "loading"}
+                  onClear={resetAllFilters}
+                  onError={handleLocalSearchError}
+                  onLocationFound={handleLocationFound}
+                  showLabel={false}
+                />
+              </CollapsibleSection>
+              <FilterPanel
+                confidenceCounts={confidenceCounts}
+                drivers={drivers}
+                filters={filters}
+                hasFilters={hasSidebarFilters}
+                onChange={handleFilterChange}
+                onReset={clearSidebarFilters}
+                onResetAll={resetAllFilters}
+                regions={regions}
+                resultCount={filteredSites.length}
+              />
+            </div>
           </aside>
 
           <section aria-label="Ranked river chemistry feed" className="min-w-0">
+            <div className="mb-4 sm:hidden">
+              <QuickFilters
+                hasData={Boolean(data)}
+                layout="row"
+                metricFilter={metricFilter}
+                onMetricClick={handleMetricClick}
+                siteCounts={siteCounts}
+              />
+              <button
+                aria-expanded={mobileFiltersOpen}
+                className="mt-3 inline-flex w-full items-center justify-between rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={() => setMobileFiltersOpen((current) => !current)}
+                type="button"
+              >
+                Filters
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`h-4 w-4 transition-transform duration-200 ${mobileFiltersOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+              <div
+                className={`grid transition-[grid-template-rows] duration-200 ${
+                  mobileFiltersOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className="mt-3 space-y-4 pb-2">
+                    <CollapsibleSection defaultOpen title="Enter your postcode">
+                      <PostcodeSearch
+                        disabled={!data}
+                        embedded
+                        inputId="mobile-postcode-search"
+                        error={localSearch.status === "error" ? localSearch.error : null}
+                        hasActiveSearch={localSearch.status === "ready"}
+                        isLoading={localSearch.status === "loading"}
+                        onClear={resetAllFilters}
+                        onError={handleLocalSearchError}
+                        onLocationFound={handleLocationFound}
+                        showLabel={false}
+                      />
+                    </CollapsibleSection>
+                    <FilterPanel
+                      confidenceCounts={confidenceCounts}
+                      drivers={drivers}
+                      filters={filters}
+                      hasFilters={hasSidebarFilters}
+                      onChange={handleFilterChange}
+                      onReset={clearSidebarFilters}
+                      onResetAll={resetAllFilters}
+                      regions={regions}
+                      resultCount={filteredSites.length}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
             {error ? <Notice tone="error">{error}</Notice> : null}
             {!data && !error ? <Notice>Loading the ranked chemistry feed...</Notice> : null}
             {localSearchActive ? (
@@ -294,7 +368,6 @@ function App() {
           </section>
         </section>
       ) : null}
-
       {view === "map" ? (
         <Suspense fallback={<LoadingPanel label="Loading the map..." />}>
           <MapView
@@ -384,24 +457,112 @@ function NavButton({
   );
 }
 
+interface QuickFiltersProps {
+  hasData: boolean;
+  layout: "row" | "stack";
+  metricFilter: MetricFilter;
+  onMetricClick: (nextFilter: Exclude<MetricFilter, null>) => void;
+  siteCounts: {
+    crossType: number;
+    flagged: number;
+    total: number;
+  };
+}
+
+function QuickFilters({ hasData, layout, metricFilter, onMetricClick, siteCounts }: QuickFiltersProps) {
+  const containerClass =
+    layout === "row"
+      ? "flex gap-2 overflow-x-auto pb-2"
+      : "grid gap-2";
+  const itemClass = layout === "row" ? "min-w-56 flex-1" : "w-full";
+
+  return (
+    <div className={containerClass}>
+      <Metric
+        active={metricFilter === "total"}
+        className={itemClass}
+        dotClass="bg-emerald-600"
+        label="All rivers"
+        onClick={() => onMetricClick("total")}
+        title="The number of Environment Agency river monitoring points included in this analysis."
+        value={hasData ? siteCounts.total.toLocaleString("en-GB") : "..."}
+      />
+      <Metric
+        active={metricFilter === "flagged"}
+        activeClassName="border-l-amber-600"
+        className={itemClass}
+        dotClass="bg-amber-500"
+        label="Water looks different"
+        onClick={() => onMetricClick("flagged")}
+        title="Sites in the top 5% nationally for unusual chemistry. These are statistical outliers - sites whose chemical profile deviates most from other rivers of the same type. This is not a legal or regulatory threshold."
+        value={hasData ? siteCounts.flagged.toLocaleString("en-GB") : "..."}
+      />
+      <Metric
+        active={metricFilter === "crossType"}
+        className={itemClass}
+        dotClass="bg-teal-600"
+        label="Doesn't match setting"
+        onClick={() => onMetricClick("crossType")}
+        title="Sites whose chemistry does not match their official river type classification."
+        value={hasData ? siteCounts.crossType.toLocaleString("en-GB") : "..."}
+      />
+    </div>
+  );
+}
+
+function CollapsibleSection({
+  children,
+  defaultOpen = false,
+  title,
+}: {
+  children: ReactNode;
+  defaultOpen?: boolean;
+  title: string;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white">
+      <button
+        aria-expanded={isOpen}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-semibold text-ink"
+        onClick={() => setIsOpen((current) => !current)}
+        type="button"
+      >
+        {title}
+        <ChevronDown
+          aria-hidden="true"
+          className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${isOpen ? "rotate-0" : "-rotate-90"}`}
+        />
+      </button>
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="px-4 pb-4">{children}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
 interface MetricProps {
   active?: boolean;
   activeClassName?: string;
-  activeLabel?: string;
+  className?: string;
+  dotClass: string;
   label: string;
   onClick: () => void;
-  subtitle: string;
   title?: string;
   value: string;
 }
 
 function Metric({
   active = false,
-  activeClassName = "border-b-teal-600",
-  activeLabel,
+  activeClassName = "border-l-teal-600",
+  className = "",
+  dotClass,
   label,
   onClick,
-  subtitle,
   title,
   value,
 }: MetricProps) {
@@ -409,28 +570,24 @@ function Metric({
     <button
       aria-label={`${label} metric filter`}
       aria-pressed={active}
-      className={`rounded-lg border border-slate-200 p-3 text-left transition hover:bg-slate-50 hover:shadow-sm ${
+      className={`rounded-md border p-3 text-left transition hover:bg-slate-50 hover:shadow-sm ${className} ${
         active
-          ? `border-b-2 bg-slate-50 ${activeClassName}`
-          : "cursor-pointer bg-slate-100"
+          ? `border-l-4 bg-slate-100 ${activeClassName}`
+          : "border-slate-200 bg-white"
       }`}
       onClick={onClick}
       title={title}
       type="button"
     >
-      <p className="inline-flex items-center gap-1.5 text-sm text-slate-500">
-        {label}
-        {title ? <InfoIcon aria-hidden="true" className="h-3.5 w-3.5" /> : null}
+      <p className="flex min-w-0 items-center gap-2 text-sm font-semibold text-slate-700">
+        <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${dotClass}`} />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {title ? <InfoIcon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" /> : null}
       </p>
-      <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-400">{subtitle}</p>
-      {active && activeLabel ? (
-        <p className="mt-1 text-xs font-semibold text-slate-600">{activeLabel}</p>
-      ) : null}
+      <p className="mt-1 text-xl font-semibold leading-tight text-slate-900">{value}</p>
     </button>
   );
 }
-
 function applyMetricFilter(sites: SiteEntry[], filter: MetricFilter): SiteEntry[] {
   if (filter === "flagged") {
     return sites.filter((site) => site.is_flagged);
@@ -480,7 +637,51 @@ function formatProcessDate(value: string): string {
   }).format(new Date(value));
 }
 
+function countConfidenceTiers(sites: SiteEntry[]): Record<ConfidenceCountKey, number> {
+  return sites.reduce<Record<ConfidenceCountKey, number>>(
+    (counts, site) => {
+      const tier = normalizeConfidenceTier(site.confidence_tier);
+      if (tier) {
+        counts[tier] += 1;
+      }
+      return counts;
+    },
+    { "well-monitored": 0, moderate: 0, limited: 0 },
+  );
+}
+
+function normalizeConfidenceTier(tier: SiteEntry["confidence_tier"]): ConfidenceCountKey | null {
+  if (tier === "well" || tier === "well-monitored") {
+    return "well-monitored";
+  }
+  if (tier === "moderate" || tier === "limited") {
+    return tier;
+  }
+  return null;
+}
+
+function hasActiveFilters(filters: Filters): boolean {
+  return Boolean(
+    filters.region ||
+      filters.severity ||
+      filters.driver ||
+      filters.query ||
+      filters.confidenceTiers.length > 0,
+  );
+}
+
+function toggleConfidenceTier(filters: Filters, tier: ConfidenceFilterTier): Filters {
+  const isActive = filters.confidenceTiers.includes(tier);
+  return {
+    ...filters,
+    confidenceTiers: isActive
+      ? filters.confidenceTiers.filter((selectedTier) => selectedTier !== tier)
+      : [...filters.confidenceTiers, tier],
+  };
+}
+
 interface FilterPanelProps {
+  confidenceCounts: Record<ConfidenceCountKey, number>;
   drivers: string[];
   filters: Filters;
   hasFilters: boolean;
@@ -492,6 +693,7 @@ interface FilterPanelProps {
 }
 
 function FilterPanel({
+  confidenceCounts,
   drivers,
   filters,
   hasFilters,
@@ -501,69 +703,121 @@ function FilterPanel({
   regions,
   resultCount,
 }: FilterPanelProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   return (
-    <form className="rounded-lg border border-slate-200 bg-white p-4" onSubmit={(event) => event.preventDefault()}>
-      <div className="flex items-center gap-2">
-        <Filter aria-hidden="true" className="h-4 w-4 text-riverblue" />
-        <h2 className="text-lg font-semibold text-ink">Refine the feed</h2>
-      </div>
-      <p className="mt-2 text-sm text-slatecopy">
-        {resultCount.toLocaleString("en-GB")} sites match the current view.
-      </p>
-
-      <label className="mt-5 block text-sm font-semibold text-ink" htmlFor="site-search">
-        Search
-      </label>
-      <div className="mt-2 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-riverblue focus-within:ring-2 focus-within:ring-riverblue/20">
-        <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
-        <input
-          className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none"
-          id="site-search"
-          onChange={(event) => onChange({ ...filters, query: event.target.value })}
-          placeholder="Site, river, water body"
-          type="search"
-          value={filters.query}
+    <form className="rounded-lg border border-slate-200 bg-white" onSubmit={(event) => event.preventDefault()}>
+      <button
+        aria-expanded={isExpanded}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        onClick={() => setIsExpanded((current) => !current)}
+        type="button"
+      >
+        <span>
+          <span className="flex items-center gap-2 text-lg font-semibold text-ink">
+            <Filter aria-hidden="true" className="h-4 w-4 text-riverblue" />
+            Refine the feed
+          </span>
+          <span className="mt-1 block text-sm font-normal text-slatecopy">
+            {resultCount.toLocaleString("en-GB")} sites match the current view.
+          </span>
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 ${isExpanded ? "rotate-0" : "-rotate-90"}`}
         />
+      </button>
+
+      <div
+        className={`grid transition-[grid-template-rows] duration-200 ${isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="px-4 pb-4">
+            <label className="block text-sm font-semibold text-ink" htmlFor="site-search">
+              Search
+            </label>
+            <div className="mt-2 flex items-center rounded-md border border-slate-300 bg-white px-3 focus-within:border-riverblue focus-within:ring-2 focus-within:ring-riverblue/20">
+              <Search aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-500" />
+              <input
+                className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none"
+                id="site-search"
+                onChange={(event) => onChange({ ...filters, query: event.target.value })}
+                placeholder="Site, river, water body"
+                type="search"
+                value={filters.query}
+              />
+            </div>
+
+            <Select
+              label="Region"
+              onChange={(value) => onChange({ ...filters, region: value })}
+              options={regions}
+              value={filters.region}
+            />
+            <Select
+              label="Severity"
+              onChange={(value) => onChange({ ...filters, severity: value })}
+              options={["Extreme", "High", "Moderate", "Lower"]}
+              value={filters.severity}
+            />
+            <Select
+              label="Main chemical signal"
+              onChange={(value) => onChange({ ...filters, driver: value })}
+              options={drivers}
+              value={filters.driver}
+            />
+            <fieldset className="mt-4">
+              <legend className="block text-sm font-semibold text-ink">Data confidence</legend>
+              <div className="mt-2 grid gap-2">
+                {confidenceFilterOptions.map((option) => {
+                  const isActive = filters.confidenceTiers.includes(option.tier);
+                  return (
+                    <button
+                      aria-pressed={isActive}
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-sm font-semibold transition ${
+                        isActive
+                          ? "border-riverblue bg-riverblue/10 text-ink"
+                          : "border-slate-300 bg-white text-slate-700 hover:border-riverblue hover:text-riverblue"
+                      }`}
+                      key={option.tier}
+                      onClick={() => onChange(toggleConfidenceTier(filters, option.tier))}
+                      type="button"
+                    >
+                      <span className="inline-flex min-w-0 items-center gap-2">
+                        <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`} />
+                        <span>
+                          {option.label} ({confidenceCounts[option.tier].toLocaleString("en-GB")})
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </div>
+        </div>
       </div>
 
-      <Select
-        label="Region"
-        onChange={(value) => onChange({ ...filters, region: value })}
-        options={regions}
-        value={filters.region}
-      />
-      <Select
-        label="Severity"
-        onChange={(value) => onChange({ ...filters, severity: value })}
-        options={["Extreme", "High", "Moderate", "Lower"]}
-        value={filters.severity}
-      />
-      <Select
-        label="Main chemical signal"
-        onChange={(value) => onChange({ ...filters, driver: value })}
-        options={drivers}
-        value={filters.driver}
-      />
-
-      <button
-        className="mt-5 w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-riverblue hover:text-riverblue disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={!hasFilters}
-        onClick={onReset}
-        type="button"
-      >
-        Clear filters
-      </button>
-      <button
-        className="mt-2 w-full rounded-md border border-riverblue bg-riverblue px-3 py-2 text-sm font-semibold text-white transition hover:bg-riverblue-dark"
-        onClick={onResetAll}
-        type="button"
-      >
-        Reset all filters
-      </button>
+      <div className="border-t border-slate-200 p-4">
+        <button
+          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-riverblue hover:text-riverblue disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!hasFilters}
+          onClick={onReset}
+          type="button"
+        >
+          Clear filters
+        </button>
+        <button
+          className="mt-2 w-full rounded-md border border-riverblue bg-riverblue px-3 py-2 text-sm font-semibold text-white transition hover:bg-riverblue-dark"
+          onClick={onResetAll}
+          type="button"
+        >
+          Reset all filters
+        </button>
+      </div>
     </form>
   );
 }
-
 interface SelectProps {
   label: string;
   onChange: (value: string) => void;
@@ -596,6 +850,25 @@ function Select({ label, onChange, options, value }: SelectProps) {
   );
 }
 
+function DisclaimerBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 sm:flex-row sm:items-start sm:justify-between">
+      <p>
+        River Signal uses Environment Agency monitoring data and statistical methods to highlight unusual river
+        chemistry. This is an independent research tool, not an official assessment. Results should be cross-checked
+        against other sources before drawing conclusions.
+      </p>
+      <button
+        aria-label="Dismiss disclaimer"
+        className="self-end rounded-md border border-amber-300 px-2 py-1 text-sm font-semibold text-amber-950 hover:bg-amber-100 sm:self-start"
+        onClick={onDismiss}
+        type="button"
+      >
+        {"\u2715"}
+      </button>
+    </div>
+  );
+}
 function Notice({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "error" }) {
   return (
     <div
@@ -905,7 +1178,7 @@ function AboutSection() {
           </p>
           <p>
             The underlying research methodology, UMAP based chemical fingerprinting of river
-            monitoring data, is currently under peer review at Water Research.
+            monitoring data, is currently under peer review at an international water science journal.
           </p>
         </AboutBlock>
 
@@ -928,6 +1201,15 @@ function AboutSection() {
           </a>
         </AboutBlock>
 
+        <AboutBlock title="Have ideas or questions?">
+          <p>
+            River Signal is an independent research project. If you have feedback, spot something
+            that doesn't look right, or want to discuss the methodology, get in touch.
+          </p>
+          <p>
+            Email: syedar.sohail@gmail.com
+          </p>
+        </AboutBlock>
         <AboutBlock title="Glossary">
           <div className="divide-y divide-slate-200 border border-slate-200">
             {glossaryTerms.map((item) => (
