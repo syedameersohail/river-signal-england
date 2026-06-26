@@ -16,6 +16,7 @@ import {
   confidenceMeta,
   describePeerMatch,
   peerContextSentence,
+  severityDisplayLabel,
   severityShortDescription,
   siteConfidence,
 } from "../utils/labels";
@@ -76,7 +77,7 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
 
           <div className="grid grid-cols-3 gap-2">
             <CompactMetric label="National rank" value={`#${site.anomaly_rank.toLocaleString("en-GB")}`} />
-            <CompactMetric label="Severity" value={severity} />
+            <CompactMetric label="Severity" value={severityDisplayLabel(severity)} />
             <CompactMetric label="Peer group" value={comparisonLabel(site)} />
           </div>
 
@@ -342,11 +343,18 @@ function downloadSiteData(site: SiteEntry) {
   URL.revokeObjectURL(url);
 }
 
+function crossTypeMismatchSuppressed(site: SiteEntry): boolean {
+  const official = (site.wfd_type_resolved || site.wfd_type || "").toLowerCase().trim();
+  const peer = (site.dominant_peer_type || "").toLowerCase().trim();
+  if (!peer || peer === "unknown") return true;
+  return Boolean(official && official === peer);
+}
+
 function ChemicalPatternSection({ site }: { site: SiteEntry }) {
   const officialType = site.wfd_type || "Unknown";
   const resolvedType = firstKnown(site.wfd_type_resolved, site.dominant_peer_type) || "Unknown";
   const dominantPeerType = firstKnown(site.dominant_peer_type, site.wfd_type_resolved) || "other monitored";
-  const showMismatch = Boolean(site.wfd_type && site.is_cross_type);
+  const showMismatch = Boolean(site.wfd_type && site.is_cross_type && !crossTypeMismatchSuppressed(site));
 
   return (
     <section>
@@ -385,12 +393,12 @@ function ChemicalPatternSection({ site }: { site: SiteEntry }) {
           </p>
         </div>
       ) : null}
-      {!showMismatch && site.is_strong_agreement ? (
+      {!showMismatch && (site.is_strong_agreement || (site.is_cross_type && crossTypeMismatchSuppressed(site))) ? (
         <div className="mt-3 rounded-lg border border-emerald-600 bg-emerald-50 p-4 text-emerald-950">
           <div className="flex items-start gap-3">
             <CheckCircle2 aria-hidden="true" className="mt-1 h-5 w-5 shrink-0" />
             <p className="text-sm leading-6">
-              Its chemistry broadly matches similar {officialType} rivers.
+              This river's chemistry matches its official {officialType} classification.
             </p>
           </div>
         </div>

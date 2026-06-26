@@ -444,19 +444,10 @@ function QuickFilters({ hasData, layout, metricFilter, onMetricClick, siteCounts
         activeClassName="border-l-amber-600"
         className={itemClass}
         dotClass="bg-amber-500"
-        label="Water looks different"
+        label="Most unusual readings"
         onClick={() => onMetricClick("flagged")}
-        title="Sites in the top 5% nationally for unusual chemistry. These are statistical outliers - sites whose chemical profile deviates most from other rivers of the same type. This is not a legal or regulatory threshold."
+        title="Sites where chemical readings differ most from similar rivers."
         value={hasData ? siteCounts.flagged.toLocaleString("en-GB") : "..."}
-      />
-      <Metric
-        active={metricFilter === "crossType"}
-        className={itemClass}
-        dotClass="bg-teal-600"
-        label="Doesn't match setting"
-        onClick={() => onMetricClick("crossType")}
-        title="Sites whose chemistry does not match their official river type classification."
-        value={hasData ? siteCounts.crossType.toLocaleString("en-GB") : "..."}
       />
     </div>
   );
@@ -888,7 +879,12 @@ function SidebarFilterPanel({
             <Select
               label="Severity"
               onChange={(value) => onChange({ ...filters, severity: value })}
-              options={["Extreme", "High", "Moderate", "Lower"]}
+              options={[
+                { value: "Extreme", label: "Very unusual" },
+                { value: "High", label: "Unusual" },
+                { value: "Moderate", label: "Some differences" },
+                { value: "Lower", label: "Similar to others" },
+              ]}
               value={filters.severity}
             />
             <Select
@@ -915,10 +911,15 @@ function SidebarFilterPanel({
     </form>
   );
 }
+interface SelectOption {
+  label: string;
+  value: string;
+}
+
 interface SelectProps {
   label: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<string | SelectOption>;
   value: string;
 }
 
@@ -937,11 +938,15 @@ function Select({ label, onChange, options, value }: SelectProps) {
         value={value}
       >
         <option value="">All</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const optValue = typeof option === "string" ? option : option.value;
+          const optLabel = typeof option === "string" ? option : option.label;
+          return (
+            <option key={optValue} value={optValue}>
+              {optLabel}
+            </option>
+          );
+        })}
       </select>
     </>
   );

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDown, ArrowUp, Droplets } from "lucide-react";
+import { ArrowDown, ArrowUp, Droplets } from "lucide-react";
 import {
   buildSummary,
   getSeverity,
@@ -13,6 +13,7 @@ import {
   confidenceFillClass,
   confidenceFrequencyText,
   confidenceMeta,
+  severityDisplayLabel,
   severityShortDescription,
   siteConfidence,
 } from "../utils/labels";
@@ -26,8 +27,6 @@ function FeedCard({ onOpen, site }: FeedCardProps) {
   const severity = getSeverity(site.anomaly_score);
   const drivers = site.drivers ?? [];
   const distanceKm = "distanceKm" in site ? site.distanceKm : null;
-  const showMismatch = Boolean(site.wfd_type && site.is_cross_type);
-  const mismatchTooltip = `This river looks chemically out of character for its official ${site.wfd_type || "Unknown"} type. Further investigation is needed.`;
   const confidence = siteConfidence(site);
   const confidenceDetails = confidenceMeta(site);
 
@@ -47,9 +46,7 @@ function FeedCard({ onOpen, site }: FeedCardProps) {
         <ConfidenceEvidenceBar site={site} />
       </div>
       <article
-        className={`rounded-b-lg border border-l-4 bg-white transition-shadow duration-200 hover:shadow-md ${
-          showMismatch ? "border-amber-400" : "border-slate-200"
-        } ${severityBorderClass(severity)}`}
+        className={`rounded-b-lg border border-l-4 border-slate-200 bg-white transition-shadow duration-200 hover:shadow-md ${severityBorderClass(severity)}`}
       >
         <button className="block w-full p-4 text-left sm:p-5" onClick={onOpen} type="button">
           <div className="flex flex-col gap-4 md:flex-row md:items-start">
@@ -64,7 +61,7 @@ function FeedCard({ onOpen, site }: FeedCardProps) {
                   )}`}
                 >
                   <span aria-hidden="true" className={`h-2 w-2 rounded-full ${getSeverityDot(severity)}`} />
-                  {severity}
+                  {severityDisplayLabel(severity)}
                 </span>
                 <p className="mt-1 max-w-36 text-xs leading-5 text-slate-500">
                   {severityShortDescription(severity)}
@@ -79,15 +76,6 @@ function FeedCard({ onOpen, site }: FeedCardProps) {
                     <h2 className="text-xl font-semibold leading-snug text-ink">
                       {site.display_name || site.site_label}
                     </h2>
-                    {showMismatch ? (
-                      <span
-                        className="inline-flex items-center gap-1.5 rounded-md border border-amber-600 bg-amber-100 px-2.5 py-1 text-sm font-semibold text-amber-950"
-                        title={mismatchTooltip}
-                      >
-                        <AlertTriangle aria-hidden="true" className="h-4 w-4" />
-                        Looks out of character
-                      </span>
-                    ) : null}
                   </div>
                   <p className="mt-1 text-sm text-slatecopy">
                     {site.water_body_name || "Water body not classified"} - {site.region || "Region not listed"}

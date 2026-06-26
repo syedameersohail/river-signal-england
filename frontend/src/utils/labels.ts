@@ -47,6 +47,17 @@ export function peerContextSentence(site: SiteEntry): string {
   return `Compared against ${count} similar monitoring sites.`;
 }
 
+export function severityDisplayLabel(severity: SeverityBand): string {
+  const labels: Record<SeverityBand, string> = {
+    Extreme: "Very unusual",
+    High: "Unusual",
+    Moderate: "Some differences",
+    Lower: "Similar to others",
+  };
+
+  return labels[severity];
+}
+
 export function severityDescription(severity: SeverityBand): string {
   const descriptions: Record<SeverityBand, string> = {
     Extreme: "This river's water is very different from other rivers like it",
