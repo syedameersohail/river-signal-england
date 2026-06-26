@@ -47,12 +47,23 @@ export function peerContextSentence(site: SiteEntry): string {
   return `Compared against ${count} similar monitoring sites.`;
 }
 
+export function severityDisplayLabel(severity: SeverityBand): string {
+  const labels: Record<SeverityBand, string> = {
+    Extreme: "Very unusual",
+    High: "Unusual",
+    Moderate: "Some differences",
+    Lower: "Similar to others",
+  };
+
+  return labels[severity];
+}
+
 export function severityDescription(severity: SeverityBand): string {
   const descriptions: Record<SeverityBand, string> = {
-    Extreme: "This river's water is very different from other rivers like it",
-    High: "This river's water is noticeably different from other rivers like it",
-    Moderate: "Some differences from other rivers like it",
-    Lower: "Water is similar to other rivers like it",
+    Extreme: "Readings are very different from similar rivers",
+    High: "Readings are noticeably different from similar rivers",
+    Moderate: "Some readings differ from similar rivers",
+    Lower: "Readings are similar to comparable rivers",
   };
 
   return descriptions[severity];
@@ -60,10 +71,10 @@ export function severityDescription(severity: SeverityBand): string {
 
 export function severityShortDescription(severity: SeverityBand): string {
   const descriptions: Record<SeverityBand, string> = {
-    Extreme: "This river's water is very different from other rivers like it",
-    High: "This river's water is noticeably different from other rivers like it",
-    Moderate: "Some differences from other rivers like it",
-    Lower: "Water is similar to other rivers like it",
+    Extreme: "Readings are very different from similar rivers",
+    High: "Readings are noticeably different from similar rivers",
+    Moderate: "Some readings differ from similar rivers",
+    Lower: "Readings are similar to comparable rivers",
   };
 
   return descriptions[severity];

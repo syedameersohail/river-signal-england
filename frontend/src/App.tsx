@@ -444,19 +444,10 @@ function QuickFilters({ hasData, layout, metricFilter, onMetricClick, siteCounts
         activeClassName="border-l-amber-600"
         className={itemClass}
         dotClass="bg-amber-500"
-        label="Water looks different"
+        label="Most unusual readings"
         onClick={() => onMetricClick("flagged")}
-        title="Sites in the top 5% nationally for unusual chemistry. These are statistical outliers - sites whose chemical profile deviates most from other rivers of the same type. This is not a legal or regulatory threshold."
+        title="Sites where chemical readings differ most from similar rivers."
         value={hasData ? siteCounts.flagged.toLocaleString("en-GB") : "..."}
-      />
-      <Metric
-        active={metricFilter === "crossType"}
-        className={itemClass}
-        dotClass="bg-teal-600"
-        label="Doesn't match setting"
-        onClick={() => onMetricClick("crossType")}
-        title="Sites whose chemistry does not match their official river type classification."
-        value={hasData ? siteCounts.crossType.toLocaleString("en-GB") : "..."}
       />
     </div>
   );
@@ -688,8 +679,8 @@ function StandardFiltersBar({
             <button
               className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
                 localSearch.status === "ready"
-                  ? "border-riverblue bg-riverblue/10 text-riverblue"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                  ? "border-teal-700 bg-teal-600 text-white hover:bg-teal-700"
+                  : "bg-teal-600 text-white border-teal-700 hover:bg-teal-700"
               }`}
               onClick={() => toggle("postcode")}
               type="button"
@@ -721,8 +712,8 @@ function StandardFiltersBar({
             <button
               className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
                 activeConfidenceCount > 0
-                  ? "border-riverblue bg-riverblue/10 text-riverblue"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                  ? "border-blue-700 bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-blue-600 text-white border-blue-700 hover:bg-blue-700"
               }`}
               onClick={() => toggle("confidence")}
               type="button"
@@ -764,8 +755,8 @@ function StandardFiltersBar({
             <button
               className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-semibold transition ${
                 filters.incidentFilter
-                  ? "border-red-300 bg-red-600 text-white hover:bg-red-700"
-                  : "border-red-200 bg-red-600 text-white hover:bg-red-700"
+                  ? "border-red-700 bg-red-600 text-white hover:bg-red-700"
+                  : "bg-red-600 text-white border-red-700 hover:bg-red-700"
               }`}
               onClick={() => toggle("incidents")}
               type="button"
@@ -796,21 +787,19 @@ function StandardFiltersBar({
             ) : null}
           </div>
 
-          <div className="ml-auto">
-            <button
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                hasAnyFilter
-                  ? "text-slate-700 hover:text-slate-900 hover:bg-slate-100"
-                  : "cursor-default text-slate-400"
-              }`}
-              disabled={!hasAnyFilter}
-              onClick={onResetAll}
-              type="button"
-            >
-              <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
-              Reset
-            </button>
-          </div>
+          <button
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition ${
+              hasAnyFilter
+                ? "bg-amber-500 text-white border-amber-600 hover:bg-amber-600"
+                : "cursor-default bg-amber-500/50 text-white/70 border-amber-600/50"
+            }`}
+            disabled={!hasAnyFilter}
+            onClick={onResetAll}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
+            Reset
+          </button>
         </div>
       </div>
     </div>
@@ -890,7 +879,12 @@ function SidebarFilterPanel({
             <Select
               label="Severity"
               onChange={(value) => onChange({ ...filters, severity: value })}
-              options={["Extreme", "High", "Moderate", "Lower"]}
+              options={[
+                { value: "Extreme", label: "Very unusual" },
+                { value: "High", label: "Unusual" },
+                { value: "Moderate", label: "Some differences" },
+                { value: "Lower", label: "Similar to others" },
+              ]}
               value={filters.severity}
             />
             <Select
@@ -905,21 +899,27 @@ function SidebarFilterPanel({
 
       <div className="border-t border-slate-200 p-4">
         <button
-          className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-riverblue hover:text-riverblue disabled:cursor-not-allowed disabled:opacity-50"
+          className="bg-amber-500 text-white border-amber-600 hover:bg-amber-600 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium w-full border transition disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!hasFilters}
           onClick={onReset}
           type="button"
         >
+          <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
           Clear filters
         </button>
       </div>
     </form>
   );
 }
+interface SelectOption {
+  label: string;
+  value: string;
+}
+
 interface SelectProps {
   label: string;
   onChange: (value: string) => void;
-  options: string[];
+  options: Array<string | SelectOption>;
   value: string;
 }
 
@@ -938,11 +938,15 @@ function Select({ label, onChange, options, value }: SelectProps) {
         value={value}
       >
         <option value="">All</option>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
+        {options.map((option) => {
+          const optValue = typeof option === "string" ? option : option.value;
+          const optLabel = typeof option === "string" ? option : option.label;
+          return (
+            <option key={optValue} value={optValue}>
+              {optLabel}
+            </option>
+          );
+        })}
       </select>
     </>
   );
