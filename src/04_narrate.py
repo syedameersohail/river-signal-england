@@ -450,7 +450,15 @@ def narrate_site(row: dict, feature_cols: list[str], config: dict) -> dict:
     confidence_tier = get_confidence_tier(visits, _last_sample_year(row), config)
 
     if not bool(row.get("is_flagged", False)):
-        summary = _normal_summary(row)
+        if bool(row.get("is_cross_type", False)):
+            summary = (
+                "This river's water is within the normal range for its type overall. "
+                "However, the rivers most chemically similar to it belong to different "
+                "river types, which may reflect local conditions at the boundary between "
+                "river classifications."
+            )
+        else:
+            summary = _normal_summary(row)
         driver_details = []
     elif not driver_details:
         summary = (

@@ -112,7 +112,7 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
                 </>
               ) : (
                 <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slatecopy">
-                  This site is outside the narrated top set, so chemical drivers are not listed yet.
+                  No individual chemical measures stand out strongly compared with similar rivers.
                 </p>
               )}
             </div>
@@ -359,9 +359,20 @@ function ChemicalPatternSection({ site }: { site: SiteEntry }) {
           <div className="flex items-start gap-3">
             <AlertTriangle aria-hidden="true" className="mt-1 h-5 w-5 shrink-0" />
             <p className="text-sm leading-6">
-              This river looks out of character for its official {officialType} type. Its chemistry
-              is closer to {dominantPeerType} rivers in the peer analysis. This may indicate
-              external pollution pressure and should be investigated further.
+              {site.is_flagged ? (
+                <>
+                  This river looks out of character for its official {officialType} type. Its chemistry
+                  is closer to {dominantPeerType} rivers in the peer analysis. This may indicate
+                  external pollution pressure and should be investigated further.
+                </>
+              ) : (
+                <>
+                  This river looks out of character for its official {officialType} type. Its chemistry
+                  is closer to {dominantPeerType} rivers in the peer analysis. This can happen when a
+                  river sits at the boundary between different natural river types, or where local land
+                  use or geology differs from the wider classification.
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -637,7 +648,7 @@ function RadarChart({
   if (!names.length) {
     return (
       <p className="mt-3 border border-slate-200 bg-slate-50 p-3 text-sm text-slatecopy">
-        No narrated driver data is available for this site yet.
+        No individual chemical measures stand out strongly compared with similar rivers.
       </p>
     );
   }
@@ -645,10 +656,10 @@ function RadarChart({
   return (
     <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
       <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-        <LegendItem swatchClass="bg-red-600" label="Red shape = this site" />
+        <LegendItem swatchClass={severitySwatchClass(severity)} label={`${severityColorLabel(severity)} shape = this site`} />
         <LegendItem swatchClass="border border-ink bg-white" label="Black line = expected chemistry for similar sites" />
         <LegendItem swatchClass="bg-slate-300" label="Further from the centre = higher than expected" />
-        <LegendItem swatchClass="bg-red-100" label="Big red spikes = unusual readings" />
+        <LegendItem swatchClass={severitySpikeClass(severity)} label={`Big ${severityColorLabel(severity).toLowerCase()} spikes = unusual readings`} />
       </div>
       <svg
         className="mx-auto mt-3 h-auto w-full max-w-[460px]"
@@ -716,6 +727,36 @@ function RadarChart({
       </svg>
     </div>
   );
+}
+
+function severityColorLabel(severity: SeverityBand): string {
+  const labels: Record<SeverityBand, string> = {
+    Extreme: "Red",
+    High: "Orange",
+    Moderate: "Amber",
+    Lower: "Green",
+  };
+  return labels[severity];
+}
+
+function severitySwatchClass(severity: SeverityBand): string {
+  const classes: Record<SeverityBand, string> = {
+    Extreme: "bg-red-600",
+    High: "bg-orange-500",
+    Moderate: "bg-amber-500",
+    Lower: "bg-emerald-600",
+  };
+  return classes[severity];
+}
+
+function severitySpikeClass(severity: SeverityBand): string {
+  const classes: Record<SeverityBand, string> = {
+    Extreme: "bg-red-100",
+    High: "bg-orange-100",
+    Moderate: "bg-amber-100",
+    Lower: "bg-emerald-100",
+  };
+  return classes[severity];
 }
 
 function LegendItem({ label, swatchClass }: { label: string; swatchClass: string }) {
