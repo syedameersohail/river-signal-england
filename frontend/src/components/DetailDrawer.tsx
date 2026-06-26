@@ -55,12 +55,12 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
                 {site.display_name || titleCaseSiteName(site.site_label)}
               </h2>
               <p className="mt-2 text-xs leading-5 text-slate-400">
-                This is an Environment Agency monitoring point name {"\u2014"} it describes where water samples are collected, not the source of any pollution
+                This is an Environment Agency monitoring point name. It describes where water samples are collected, not the source of any pollution
               </p>
             </div>
             <button
               aria-label="Close"
-              className="rounded-md border border-slate-300 p-2 text-slate-700 hover:border-riverblue hover:text-riverblue"
+              className="rounded-md border border-red-600 bg-red-600 p-2 text-white hover:bg-red-700 hover:border-red-700"
               onClick={onClose}
               type="button"
             >
