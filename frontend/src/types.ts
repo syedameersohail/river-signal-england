@@ -43,6 +43,8 @@ export interface SiteEntry {
   is_strong_agreement: boolean;
   peer_site_ids: string[];
   incidents?: IncidentData;
+  wfd_status?: WfdStatus;
+  discharge_points?: DischargePoints;
 }
 
 export interface IncidentData {
@@ -114,6 +116,27 @@ export interface AddressSuggestion {
   displayName: string;
   postcode: string;
   location: GeoPoint;
+}
+
+export interface WfdStatus {
+  overall_status: string | null;
+  ecological_status: string | null;
+  chemical_status: string | null;
+}
+
+export interface NearestFacility {
+  name: string;
+  distance_m: number;
+}
+
+export interface DischargePoints {
+  sewage_works_count: number;
+  storm_overflows_count: number;
+  industrial_discharges_count: number;
+  total_discharge_points: number;
+  has_discharge_points: boolean;
+  nearest_sewage_work: NearestFacility | null;
+  nearest_industrial: NearestFacility | null;
 }
 
 export type LocalSearchStatus = "idle" | "loading" | "ready" | "error";
