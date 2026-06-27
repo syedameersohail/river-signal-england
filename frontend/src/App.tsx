@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import AddressSearchModal from "./components/AddressSearchModal";
 import DetailDrawer from "./components/DetailDrawer";
 import FeedCard from "./components/FeedCard";
 import PostcodeSearch from "./components/PostcodeSearch";
@@ -646,6 +647,7 @@ function StandardFiltersBar({
   onResetAll,
 }: StandardFiltersBarProps) {
   const [openDropdown, setOpenDropdown] = useState<"postcode" | "confidence" | "incidents" | null>(null);
+  const [showAddressModal, setShowAddressModal] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
 
   const closeDropdown = useCallback((event: MouseEvent) => {
@@ -675,38 +677,25 @@ function StandardFiltersBar({
     <div className="border-b border-slate-200 bg-slate-50" ref={barRef}>
       <div className="mx-auto max-w-7xl px-4 py-2.5 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="relative">
-            <button
-              className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
-                localSearch.status === "ready"
-                  ? "border-teal-700 bg-teal-600 text-white hover:bg-teal-700"
-                  : "bg-teal-600 text-white border-teal-700 hover:bg-teal-700"
-              }`}
-              onClick={() => toggle("postcode")}
-              type="button"
-            >
-              <MapPin aria-hidden="true" className="h-4 w-4" />
-              <span className="hidden sm:inline">{localSearch.status === "ready" ? `Near ${localSearch.label}` : "Postcode"}</span>
-              <span className="sm:hidden">Location</span>
-              <ChevronDown aria-hidden="true" className={`h-3.5 w-3.5 transition-transform ${openDropdown === "postcode" ? "rotate-180" : ""}`} />
-            </button>
-            {openDropdown === "postcode" ? (
-              <div className="absolute left-0 top-full z-20 mt-1.5 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
-                <PostcodeSearch
-                  disabled={!data}
-                  embedded
-                  inputId="bar-postcode-search"
-                  error={localSearch.status === "error" ? localSearch.error : null}
-                  hasActiveSearch={localSearch.status === "ready"}
-                  isLoading={localSearch.status === "loading"}
-                  onClear={onResetAll}
-                  onError={onLocationError}
-                  onLocationFound={(...args) => { onLocationFound(...args); setOpenDropdown(null); }}
-                  showLabel={false}
-                />
-              </div>
-            ) : null}
-          </div>
+          <button
+            className={`inline-flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm font-medium transition ${
+              localSearch.status === "ready"
+                ? "border-teal-700 bg-teal-600 text-white hover:bg-teal-700"
+                : "bg-teal-600 text-white border-teal-700 hover:bg-teal-700"
+            }`}
+            onClick={() => setShowAddressModal(true)}
+            type="button"
+          >
+            <MapPin aria-hidden="true" className="h-4 w-4" />
+            <span className="hidden sm:inline">{localSearch.status === "ready" ? `Near ${localSearch.label}` : "Postcode"}</span>
+            <span className="sm:hidden">Location</span>
+          </button>
+          {showAddressModal ? (
+            <AddressSearchModal
+              onClose={() => setShowAddressModal(false)}
+              onSelect={(location, label) => { onLocationFound(location, label); setShowAddressModal(false); }}
+            />
+          ) : null}
 
           <div className="relative">
             <button

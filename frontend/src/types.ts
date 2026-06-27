@@ -110,6 +110,12 @@ export interface PostcodeLookupResult {
   location: GeoPoint;
 }
 
+export interface AddressSuggestion {
+  displayName: string;
+  postcode: string;
+  location: GeoPoint;
+}
+
 export type LocalSearchStatus = "idle" | "loading" | "ready" | "error";
 
 export interface LocalSearchState {
