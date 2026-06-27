@@ -109,6 +109,11 @@ function FeedCard({ onOpen, site }: FeedCardProps) {
                     {site.incidents.total_all_incidents} Incidents
                   </span>
                 ) : null}
+                {site.discharge_points && site.discharge_points.total_discharge_points > 5 ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
+                    🏭 {site.discharge_points.total_discharge_points} Discharges
+                  </span>
+                ) : null}
               </div>
               <div className="mt-4 flex justify-end">
                 <span className="text-sm font-semibold text-riverblue hover:underline">View details -&gt;</span>

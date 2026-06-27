@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Download, Droplets, ExternalLink, Link2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, Droplets, ExternalLink, Factory, Link2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import {
@@ -81,6 +81,8 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             <CompactMetric label="Peer group" value={comparisonLabel(site)} />
           </div>
 
+          {site.wfd_status ? <WfdStatusSection site={site} /> : null}
+
           <SimpleComparisonTable drivers={drivers} site={site} />
 
           <ChemicalPatternSection site={site} />
@@ -146,6 +148,8 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
           </section>
 
           {site.incidents?.has_any_incidents ? <IncidentsContextSection site={site} /> : null}
+
+          {site.discharge_points?.has_discharge_points ? <DischargePointsSection site={site} /> : null}
 
           <DataQualitySection confidence={confidence} site={site} />
 
@@ -259,6 +263,103 @@ function IncidentsContextSection({ site }: { site: SiteEntry }) {
       </p>
     </section>
   );
+}
+
+function WfdStatusSection({ site }: { site: SiteEntry }) {
+  const wfd = site.wfd_status;
+  if (!wfd) return null;
+
+  const eco = wfd.ecological_status;
+  const chem = wfd.chemical_status;
+  const overall = wfd.overall_status;
+
+  return (
+    <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h3 className="text-sm font-semibold text-slate-600">Official EA Status (WFD 2022)</h3>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {eco ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold ${wfdStatusClasses(eco)}`}>
+            Ecological: {eco}
+          </span>
+        ) : null}
+        {chem ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold ${wfdStatusClasses(chem)}`}>
+            Chemical: {chem}
+          </span>
+        ) : null}
+        {overall ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold ${wfdStatusClasses(overall)}`}>
+            Overall: {overall}
+          </span>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function wfdStatusClasses(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "high" || s === "good") return "border-emerald-600 bg-emerald-50 text-emerald-900";
+  if (s === "moderate") return "border-amber-500 bg-amber-50 text-amber-900";
+  if (s === "poor" || s === "bad") return "border-red-600 bg-red-50 text-red-900";
+  return "border-slate-300 bg-white text-slate-700";
+}
+
+function DischargePointsSection({ site }: { site: SiteEntry }) {
+  const dp = site.discharge_points;
+  if (!dp || !dp.has_discharge_points) return null;
+
+  return (
+    <section className="my-6 border-b border-t border-slate-200 bg-slate-50 px-4 py-6 md:px-6">
+      <div className="flex items-center gap-2">
+        <Factory aria-hidden="true" className="h-5 w-5 text-slate-600" />
+        <h3 className="text-lg font-semibold text-slate-900">Regulated Discharge Points</h3>
+      </div>
+      <p className="mt-1 text-sm text-slate-500">
+        Permitted discharge infrastructure within 2km (straight-line distance)
+      </p>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <DischargeStatCard count={dp.sewage_works_count} label="Sewage Works" />
+        <DischargeStatCard count={dp.storm_overflows_count} label="Storm Overflows" />
+        <DischargeStatCard count={dp.industrial_discharges_count} label="Industrial Discharges" />
+      </div>
+
+      {(dp.nearest_sewage_work || dp.nearest_industrial) ? (
+        <div className="mt-4 space-y-2">
+          <p className="text-sm font-semibold text-slate-700">Nearest facilities</p>
+          {dp.nearest_sewage_work ? (
+            <p className="text-sm text-slate-600">
+              Sewage: {dp.nearest_sewage_work.name} ({formatDistanceM(dp.nearest_sewage_work.distance_m)})
+            </p>
+          ) : null}
+          {dp.nearest_industrial ? (
+            <p className="text-sm text-slate-600">
+              Industrial: {dp.nearest_industrial.name} ({formatDistanceM(dp.nearest_industrial.distance_m)})
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <p className="mt-4 text-xs italic text-slate-400">
+        Note: Proximity is measured by straight-line distance. Actual flow direction and hydrological connectivity may vary. These facilities operate under Environment Agency permits.
+      </p>
+    </section>
+  );
+}
+
+function DischargeStatCard({ count, label }: { count: number; label: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <p className="text-3xl font-bold text-slate-700">{count}</p>
+      <p className="text-sm text-slate-600">{label}</p>
+    </div>
+  );
+}
+
+function formatDistanceM(metres: number): string {
+  if (metres < 1000) return `${metres}m`;
+  return `${(metres / 1000).toFixed(1)}km`;
 }
 
 function formatSpillHours(hours: number): string {
