@@ -1,14 +1,14 @@
-import { AlertTriangle, CheckCircle2, Download, Droplets, ExternalLink, Factory, Link2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Download, Droplets, ExternalLink, Factory, Link2, Sparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  buildSummary,
   eaMonitoringUrl,
   getSeverity,
   getSeverityHex,
   publicChemicalLabel,
   titleCaseSiteName,
 } from "../lib/feed";
+import { getSiteSummary } from "../lib/ai-summary";
 import type { Driver, SeverityBand, SiteEntry } from "../types";
 import {
   confidenceFillClass,
@@ -17,7 +17,6 @@ import {
   describePeerMatch,
   peerContextSentence,
   severityDisplayLabel,
-  severityShortDescription,
   siteConfidence,
 } from "../utils/labels";
 
@@ -29,6 +28,7 @@ interface DetailDrawerProps {
 
 function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
   const [showScientificData, setShowScientificData] = useState(false);
+  const [showPressureSources, setShowPressureSources] = useState(true);
   const [shareStatus, setShareStatus] = useState("");
 
   if (!site) {
@@ -38,6 +38,9 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
   const severity = getSeverity(site.anomaly_score);
   const drivers = site.drivers ?? [];
   const confidence = siteConfidence(site);
+  const hasPressureSources = Boolean(
+    site.incidents?.has_any_incidents || site.discharge_points?.has_discharge_points,
+  );
 
   return (
     <div aria-modal="true" className="fixed inset-0 z-50" role="dialog">
@@ -48,6 +51,7 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
         type="button"
       />
       <aside className="absolute right-0 top-0 flex h-full w-full max-w-2xl flex-col overflow-y-auto bg-white shadow-panel">
+        {/* 1. Header */}
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -71,25 +75,54 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
         </div>
 
         <div className="space-y-6 p-4 sm:p-5">
-          <section aria-label="Site summary">
-            <p className="whitespace-pre-line text-lg leading-relaxed text-slate-800">{buildSummary(site)}</p>
-          </section>
-
-          <div className="grid grid-cols-3 gap-2">
+          {/* 2. Stat cards (2x2 grid) */}
+          <div className="grid grid-cols-2 gap-2">
             <CompactMetric label="National rank" value={`#${site.anomaly_rank.toLocaleString("en-GB")}`} />
             <CompactMetric label="Severity" value={severityDisplayLabel(severity)} />
             <CompactMetric label="Peer group" value={comparisonLabel(site)} />
+            <WfdStatCard site={site} />
           </div>
 
-          {site.wfd_status ? <WfdStatusSection site={site} /> : null}
+          {/* 3. AI Summary */}
+          <AISummaryCard site={site} />
 
+          {/* 4. Simple comparison table */}
           <SimpleComparisonTable drivers={drivers} site={site} />
 
+          {/* 5. Potential pressure sources (collapsible, open by default) */}
+          {hasPressureSources ? (
+            <section>
+              <button
+                className="flex w-full items-center justify-between text-left"
+                onClick={() => setShowPressureSources(!showPressureSources)}
+                type="button"
+              >
+                <h3 className="text-base font-semibold text-ink">Potential pressure sources</h3>
+                {showPressureSources ? (
+                  <ChevronUp className="h-5 w-5 text-slate-400" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-slate-400" />
+                )}
+              </button>
+              {showPressureSources ? (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {site.incidents?.has_any_incidents ? <CsoCard site={site} /> : null}
+                  {site.discharge_points?.has_discharge_points ? <DischargeCard site={site} /> : null}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {/* 6. Official EA status */}
+          {site.wfd_status ? <WfdStatusSection site={site} /> : null}
+
+          {/* 7. River type match */}
           <ChemicalPatternSection site={site} />
 
+          {/* 8. Show scientific data (collapsed by default) */}
           <section>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h3 className="text-base font-semibold text-ink">Main things to notice</h3>
+              <h3 className="text-base font-semibold text-ink">Scientific data</h3>
               <label className="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
                 <input
                   checked={showScientificData}
@@ -100,59 +133,32 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
                 Show scientific data
               </label>
             </div>
-            <div className="mt-3 space-y-3">
-              {showScientificData ? <TechnicalDetails site={site} /> : null}
-              {drivers.length > 0 ? (
-                <>
-                  {drivers.map((driver) => (
-                    <ChemicalSignal
-                      driver={driver}
-                      key={driver.name}
-                      showScientificData={showScientificData}
-                    />
-                  ))}
-                  {site.is_cross_type ? <TypeMismatchSignal site={site} /> : null}
-                </>
-              ) : (
-                <p className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slatecopy">
-                  No individual chemical measures stand out strongly compared with similar rivers.
-                </p>
-              )}
-            </div>
+            {showScientificData ? (
+              <div className="mt-3 space-y-3">
+                <RadarChart drivers={drivers} featureNames={featureNames} severity={severity} scoreReference={site.score_reference} />
+                <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle aria-hidden="true" className="mt-1 h-5 w-5 shrink-0 text-riverblue" />
+                    <p className="text-sm leading-6 text-slate-700">
+                      {peerContextSentence(site)} The black line on the chart represents expected
+                      chemistry for similar sites.
+                    </p>
+                  </div>
+                </section>
+                <TechnicalDetails site={site} />
+                {drivers.map((driver) => (
+                  <ChemicalSignal
+                    driver={driver}
+                    key={driver.name}
+                    showScientificData
+                  />
+                ))}
+                <DataQualitySection confidence={confidence} site={site} />
+              </div>
+            ) : null}
           </section>
 
-          <section>
-            <h3 className="text-base font-semibold text-ink">Chemical profile</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-700">
-              This chart compares this site with similar {site.score_reference || "peer-group"} monitoring sites.
-              Red spikes show chemicals that are higher than expected.
-            </p>
-            <RadarChart drivers={drivers} featureNames={featureNames} severity={severity} />
-          </section>
-
-          <section className="grid gap-3 sm:grid-cols-2">
-            <Info label="Water body" value={site.water_body_name || "Water body not classified"} />
-            <Info label="Region" value={site.region || "Not listed"} />
-            <Info label="Area" value={site.area || "Not listed"} />
-            <Info label="WFD type" value={formatWfdType(site)} />
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle aria-hidden="true" className="mt-1 h-5 w-5 shrink-0 text-riverblue" />
-              <p className="text-sm leading-6 text-slate-700">
-                {peerContextSentence(site)} The black line on the chart represents expected
-                chemistry for similar sites.
-              </p>
-            </div>
-          </section>
-
-          {site.incidents?.has_any_incidents ? <IncidentsContextSection site={site} /> : null}
-
-          {site.discharge_points?.has_discharge_points ? <DischargePointsSection site={site} /> : null}
-
-          <DataQualitySection confidence={confidence} site={site} />
-
+          {/* 9. Action buttons */}
           <ActionsSection
             onDownload={() => downloadSiteData(site)}
             onShare={async () => {
@@ -164,6 +170,7 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
             site={site}
           />
 
+          {/* 10. Footer disclaimer */}
           <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-sm leading-6 text-slate-700">
               This analysis identifies unusual chemistry, not confirmed pollution. For official
@@ -176,6 +183,136 @@ function DetailDrawer({ featureNames, onClose, site }: DetailDrawerProps) {
     </div>
   );
 }
+
+/* ─── AI Summary Card ─────────────────────────────────────────────────── */
+
+function AISummaryCard({ site }: { site: SiteEntry }) {
+  const [summary, setSummary] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setSummary(null);
+
+    getSiteSummary(site).then((text) => {
+      if (!cancelled) {
+        setSummary(text);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [site.site_id]);
+
+  return (
+    <section
+      className="rounded-lg border p-4"
+      style={{ backgroundColor: "#f0f7ff", borderColor: "#d0e3f7" }}
+    >
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4" style={{ color: "#4a9eed" }} aria-hidden="true" />
+        <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "#4a9eed" }}>
+          AI Summary
+        </p>
+      </div>
+      <div className="mt-2">
+        {loading ? (
+          <div className="space-y-2">
+            <div className="h-4 w-full animate-pulse rounded bg-blue-100" />
+            <div className="h-4 w-11/12 animate-pulse rounded bg-blue-100" />
+            <div className="h-4 w-9/12 animate-pulse rounded bg-blue-100" />
+          </div>
+        ) : (
+          <p className="text-[15px] leading-relaxed text-slate-700">{summary}</p>
+        )}
+      </div>
+      <p className="mt-3 text-xs italic text-slate-400">
+        Generated summary based on data analysis. Not an official assessment.
+      </p>
+    </section>
+  );
+}
+
+/* ─── WFD Stat Card (for 2x2 grid) ───────────────────────────────────── */
+
+function WfdStatCard({ site }: { site: SiteEntry }) {
+  const eco = site.wfd_status?.ecological_status;
+  if (!eco) {
+    return <CompactMetric label="EA Status" value="Not available" />;
+  }
+  const colorClass = wfdBadgeClasses(eco);
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+      <p className="text-xs uppercase tracking-wide text-slate-500">EA Status</p>
+      <span className={`mt-0.5 inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${colorClass}`}>
+        {eco}
+      </span>
+    </div>
+  );
+}
+
+function wfdBadgeClasses(status: string): string {
+  const s = status.toLowerCase();
+  if (s === "high" || s === "good") return "border-emerald-600 bg-emerald-50 text-emerald-900";
+  if (s === "moderate") return "border-amber-500 bg-amber-50 text-amber-900";
+  if (s === "poor" || s === "bad") return "border-red-600 bg-red-50 text-red-900";
+  return "border-slate-300 bg-white text-slate-700";
+}
+
+/* ─── CSO Card (for pressure sources) ─────────────────────────────────── */
+
+function CsoCard({ site }: { site: SiteEntry }) {
+  const inc = site.incidents;
+  if (!inc) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center gap-2">
+        <Droplets aria-hidden="true" className="h-4 w-4 text-indigo-600" />
+        <p className="text-sm font-semibold text-slate-800">CSO / Incidents</p>
+      </div>
+      <div className="mt-2 space-y-1 text-sm text-slate-600">
+        {inc.total_edm_spills > 0 ? (
+          <p>{inc.total_edm_spills} sewage discharges ({formatSpillHours(inc.total_spill_hours)} hrs)</p>
+        ) : null}
+        {inc.total_pollution_incidents > 0 ? (
+          <p>{inc.total_pollution_incidents} pollution incidents</p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Discharge Card (for pressure sources) ───────────────────────────── */
+
+function DischargeCard({ site }: { site: SiteEntry }) {
+  const dp = site.discharge_points;
+  if (!dp) return null;
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex items-center gap-2">
+        <Factory aria-hidden="true" className="h-4 w-4 text-slate-600" />
+        <p className="text-sm font-semibold text-slate-800">Regulated discharges</p>
+      </div>
+      <div className="mt-2 space-y-1 text-sm text-slate-600">
+        {dp.sewage_works_count > 0 ? <p>{dp.sewage_works_count} sewage works</p> : null}
+        {dp.storm_overflows_count > 0 ? <p>{dp.storm_overflows_count} storm overflows</p> : null}
+        {dp.industrial_discharges_count > 0 ? <p>{dp.industrial_discharges_count} industrial</p> : null}
+        {dp.nearest_sewage_work ? (
+          <p className="text-xs text-slate-400">
+            Nearest: {dp.nearest_sewage_work.name} ({formatDistanceM(dp.nearest_sewage_work.distance_m)})
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Existing components (kept/adapted) ──────────────────────────────── */
 
 function DataQualitySection({
   confidence,
@@ -222,49 +359,6 @@ function ConfidenceEvidenceBar({ site }: { site: SiteEntry }) {
   );
 }
 
-function IncidentsContextSection({ site }: { site: SiteEntry }) {
-  const inc = site.incidents;
-  if (!inc) return null;
-
-  return (
-    <section className="my-6 border-b border-t border-slate-200 bg-slate-50 px-4 py-6 md:px-6">
-      <div className="flex items-center gap-2">
-        <Droplets aria-hidden="true" className="h-5 w-5 text-indigo-600" />
-        <h3 className="text-lg font-semibold text-slate-900">Context: Known Discharges & Incidents</h3>
-      </div>
-      <p className="mt-1 text-sm text-slate-500">
-        Environment Agency records of pollution and sewage spills within 2km.
-      </p>
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-        {inc.total_pollution_incidents > 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-3xl font-bold text-indigo-700">{inc.total_pollution_incidents}</p>
-            <p className="text-sm text-slate-600">General Pollution Incidents</p>
-            <p className="mt-1 text-xs text-slate-500">
-              Most recent: {inc.most_recent_pollution_date || "Unknown"} {"•"} Cause: {inc.primary_pollution_cause || "Unknown"}
-            </p>
-          </div>
-        ) : null}
-        {inc.total_edm_spills > 0 ? (
-          <div className="rounded-lg border border-slate-200 bg-white p-4">
-            <p className="text-3xl font-bold text-indigo-700">{inc.total_edm_spills}</p>
-            <p className="text-sm text-slate-600">Sewage Discharges (CSO)</p>
-            <p className="mt-1 text-xs text-slate-500">
-              {formatSpillHours(inc.total_spill_hours)} total hours of discharge
-            </p>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Most recent: {inc.most_recent_spill_date || "Unknown"}
-            </p>
-          </div>
-        ) : null}
-      </div>
-      <p className="mt-4 text-xs italic text-slate-400">
-        Note: Incidents are mapped by proximity. Water flow direction may affect when a discharge reaches this monitoring point.
-      </p>
-    </section>
-  );
-}
-
 function WfdStatusSection({ site }: { site: SiteEntry }) {
   const wfd = site.wfd_status;
   if (!wfd) return null;
@@ -293,6 +387,12 @@ function WfdStatusSection({ site }: { site: SiteEntry }) {
           </span>
         ) : null}
       </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <Info label="Water body" value={site.water_body_name || "Not classified"} />
+        <Info label="Region" value={site.region || "Not listed"} />
+        <Info label="Area" value={site.area || "Not listed"} />
+        <Info label="WFD type" value={formatWfdType(site)} />
+      </div>
     </section>
   );
 }
@@ -303,152 +403,6 @@ function wfdStatusClasses(status: string): string {
   if (s === "moderate") return "border-amber-500 bg-amber-50 text-amber-900";
   if (s === "poor" || s === "bad") return "border-red-600 bg-red-50 text-red-900";
   return "border-slate-300 bg-white text-slate-700";
-}
-
-function DischargePointsSection({ site }: { site: SiteEntry }) {
-  const dp = site.discharge_points;
-  if (!dp || !dp.has_discharge_points) return null;
-
-  return (
-    <section className="my-6 border-b border-t border-slate-200 bg-slate-50 px-4 py-6 md:px-6">
-      <div className="flex items-center gap-2">
-        <Factory aria-hidden="true" className="h-5 w-5 text-slate-600" />
-        <h3 className="text-lg font-semibold text-slate-900">Regulated Discharge Points</h3>
-      </div>
-      <p className="mt-1 text-sm text-slate-500">
-        Permitted discharge infrastructure within 2km (straight-line distance)
-      </p>
-
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <DischargeStatCard count={dp.sewage_works_count} label="Sewage Works" />
-        <DischargeStatCard count={dp.storm_overflows_count} label="Storm Overflows" />
-        <DischargeStatCard count={dp.industrial_discharges_count} label="Industrial Discharges" />
-      </div>
-
-      {(dp.nearest_sewage_work || dp.nearest_industrial) ? (
-        <div className="mt-4 space-y-2">
-          <p className="text-sm font-semibold text-slate-700">Nearest facilities</p>
-          {dp.nearest_sewage_work ? (
-            <p className="text-sm text-slate-600">
-              Sewage: {dp.nearest_sewage_work.name} ({formatDistanceM(dp.nearest_sewage_work.distance_m)})
-            </p>
-          ) : null}
-          {dp.nearest_industrial ? (
-            <p className="text-sm text-slate-600">
-              Industrial: {dp.nearest_industrial.name} ({formatDistanceM(dp.nearest_industrial.distance_m)})
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-      <p className="mt-4 text-xs italic text-slate-400">
-        Note: Proximity is measured by straight-line distance. Actual flow direction and hydrological connectivity may vary. These facilities operate under Environment Agency permits.
-      </p>
-    </section>
-  );
-}
-
-function DischargeStatCard({ count, label }: { count: number; label: string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <p className="text-3xl font-bold text-slate-700">{count}</p>
-      <p className="text-sm text-slate-600">{label}</p>
-    </div>
-  );
-}
-
-function formatDistanceM(metres: number): string {
-  if (metres < 1000) return `${metres}m`;
-  return `${(metres / 1000).toFixed(1)}km`;
-}
-
-function formatSpillHours(hours: number): string {
-  return Number.isInteger(hours) ? hours.toLocaleString("en-GB") : hours.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-}
-
-function ActionsSection({
-  onDownload,
-  onShare,
-  shareStatus,
-  site,
-}: {
-  onDownload: () => void;
-  onShare: () => void;
-  shareStatus: string;
-  site: SiteEntry;
-}) {
-  return (
-    <section>
-      <h3 className="text-base font-semibold text-ink">Actions</h3>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <ActionLink href={eaMonitoringUrl(site.site_id)}>
-          View EA record
-          <ExternalLink aria-hidden="true" className="h-4 w-4" />
-        </ActionLink>
-        <ActionLink href="https://www.gov.uk/report-an-environmental-incident">
-          Report a concern
-          <ExternalLink aria-hidden="true" className="h-4 w-4" />
-        </ActionLink>
-        <button
-          className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
-          onClick={onShare}
-          type="button"
-        >
-          Share
-          <Link2 aria-hidden="true" className="h-4 w-4" />
-        </button>
-        <button
-          className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
-          onClick={onDownload}
-          type="button"
-        >
-          Download data
-          <Download aria-hidden="true" className="h-4 w-4" />
-        </button>
-      </div>
-      {shareStatus ? <p className="mt-2 text-sm font-semibold text-riverblue">{shareStatus}</p> : null}
-    </section>
-  );
-}
-
-function ActionLink({ children, href }: { children: ReactNode; href: string }) {
-  return (
-    <a
-      className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
-      href={href}
-      rel="noreferrer"
-      target="_blank"
-    >
-      {children}
-    </a>
-  );
-}
-
-async function copyShareLink(siteId: string): Promise<boolean> {
-  const url = `${window.location.origin}?site=${encodeURIComponent(siteId)}`;
-  try {
-    await navigator.clipboard.writeText(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function downloadSiteData(site: SiteEntry) {
-  const blob = new Blob([JSON.stringify(site, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `river-signal-${site.site_id}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function crossTypeMismatchSuppressed(site: SiteEntry): boolean {
-  const official = (site.wfd_type_resolved || site.wfd_type || "").toLowerCase().trim();
-  const peer = (site.dominant_peer_type || "").toLowerCase().trim();
-  if (!peer || peer === "unknown") return true;
-  return Boolean(official && official === peer);
 }
 
 function ChemicalPatternSection({ site }: { site: SiteEntry }) {
@@ -513,7 +467,7 @@ function SimpleComparisonTable({ drivers, site }: { drivers: Driver[]; site: Sit
 
   return (
     <section>
-      <h3 className="text-base font-semibold text-ink">Simple comparison</h3>
+      <h3 className="text-base font-semibold text-ink">How does it compare?</h3>
       {drivers.length > 0 ? (
         <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
           <table className="w-full min-w-[420px] border-collapse text-sm">
@@ -627,15 +581,135 @@ function ChemicalSignal({
   );
 }
 
-function TypeMismatchSignal({ site }: { site: SiteEntry }) {
+function ActionsSection({
+  onDownload,
+  onShare,
+  shareStatus,
+  site,
+}: {
+  onDownload: () => void;
+  onShare: () => void;
+  shareStatus: string;
+  site: SiteEntry;
+}) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <p className="font-semibold text-ink">The river looks unusual for its official type</p>
-      <p className="mt-2 text-sm leading-6 text-slate-700">
-        Its chemistry does not closely match most similar {site.wfd_type || site.score_reference || "peer-group"} rivers.
-      </p>
+    <section>
+      <h3 className="text-base font-semibold text-ink">Actions</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <ActionLink href={eaMonitoringUrl(site.site_id)}>
+          View EA record
+          <ExternalLink aria-hidden="true" className="h-4 w-4" />
+        </ActionLink>
+        <ActionLink href="https://www.gov.uk/report-an-environmental-incident">
+          Report a concern
+          <ExternalLink aria-hidden="true" className="h-4 w-4" />
+        </ActionLink>
+        <button
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
+          onClick={onShare}
+          type="button"
+        >
+          Share
+          <Link2 aria-hidden="true" className="h-4 w-4" />
+        </button>
+        <button
+          className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
+          onClick={onDownload}
+          type="button"
+        >
+          Download data
+          <Download aria-hidden="true" className="h-4 w-4" />
+        </button>
+      </div>
+      {shareStatus ? <p className="mt-2 text-sm font-semibold text-riverblue">{shareStatus}</p> : null}
+    </section>
+  );
+}
+
+function ActionLink({ children, href }: { children: ReactNode; href: string }) {
+  return (
+    <a
+      className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-riverblue hover:text-riverblue"
+      href={href}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {children}
+    </a>
+  );
+}
+
+/* ─── Helpers ─────────────────────────────────────────────────────────── */
+
+async function copyShareLink(siteId: string): Promise<boolean> {
+  const url = `${window.location.origin}?site=${encodeURIComponent(siteId)}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function downloadSiteData(site: SiteEntry) {
+  const blob = new Blob([JSON.stringify(site, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `river-signal-${site.site_id}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function crossTypeMismatchSuppressed(site: SiteEntry): boolean {
+  const official = (site.wfd_type_resolved || site.wfd_type || "").toLowerCase().trim();
+  const peer = (site.dominant_peer_type || "").toLowerCase().trim();
+  if (!peer || peer === "unknown") return true;
+  return Boolean(official && official === peer);
+}
+
+function comparisonLabel(site: SiteEntry): string {
+  const reference = site.score_reference ? `similar ${site.score_reference} rivers` : "similar rivers";
+  const count = site.score_peer_group_size?.toLocaleString("en-GB");
+  return count ? `${count} ${reference}` : reference;
+}
+
+function firstKnown(...values: Array<string | null | undefined>): string | null {
+  return values.find((value) => value && value !== "Unknown") ?? null;
+}
+
+function CompactMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">{value}</p>
     </div>
   );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-1 text-sm leading-6 text-ink">{value}</p>
+    </div>
+  );
+}
+
+function formatWfdType(site: SiteEntry): string {
+  if (site.wfd_type_resolved) {
+    return site.wfd_type_inferred ? `${site.wfd_type_resolved} (inferred from peers)` : site.wfd_type_resolved;
+  }
+  return site.score_reference || "Global comparison";
+}
+
+function formatDistanceM(metres: number): string {
+  if (metres < 1000) return `${metres}m`;
+  return `${(metres / 1000).toFixed(1)}km`;
+}
+
+function formatSpillHours(hours: number): string {
+  return Number.isInteger(hours) ? hours.toLocaleString("en-GB") : hours.toLocaleString("en-GB", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 function publicDriverTitle(driver: Driver): string {
@@ -679,58 +753,15 @@ function publicDriverExplanation(driver: Driver): string {
   return driver.description;
 }
 
-function comparisonLabel(site: SiteEntry): string {
-  const reference = site.score_reference ? `similar ${site.score_reference} rivers` : "similar rivers";
-  const count = site.score_peer_group_size?.toLocaleString("en-GB");
-  return count ? `${count} ${reference}` : reference;
-}
-
-function firstKnown(...values: Array<string | null | undefined>): string | null {
-  return values.find((value) => value && value !== "Unknown") ?? null;
-}
-
-function Metric({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-100 p-3">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 break-words text-lg font-semibold leading-snug text-slate-900 sm:text-xl">{value}</p>
-    </div>
-  );
-}
-
-function CompactMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold leading-snug text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-slate-200 p-3">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-sm leading-6 text-ink">{value}</p>
-    </div>
-  );
-}
-
-function formatWfdType(site: SiteEntry): string {
-  if (site.wfd_type_resolved) {
-    return site.wfd_type_inferred ? `${site.wfd_type_resolved} (inferred from peers)` : site.wfd_type_resolved;
-  }
-
-  return site.score_reference || "Global comparison";
-}
-
 function RadarChart({
   drivers,
   featureNames,
+  scoreReference,
   severity,
 }: {
   drivers: Driver[];
   featureNames: string[];
+  scoreReference?: string;
   severity: SeverityBand;
 }) {
   const names = featureNames.length
@@ -763,7 +794,12 @@ function RadarChart({
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <h3 className="text-base font-semibold text-ink">Chemical profile</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-700">
+        This chart compares this site with similar {scoreReference || "peer-group"} monitoring sites.
+        Red spikes show chemicals that are higher than expected.
+      </p>
       <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
         <LegendItem swatchClass={severitySwatchClass(severity)} label={`${severityColorLabel(severity)} shape = this site`} />
         <LegendItem swatchClass="border border-ink bg-white" label="Black line = expected chemistry for similar sites" />
